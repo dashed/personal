@@ -1,0 +1,8 @@
+#!/bin/bash
+#
+# Convert mediawiki content in clipboard to Pandoc's extended markdown format, 
+# then put it back into the clipboard.
+#
+# Note: pbpaste and pbcopy are OSX commands.
+#
+pbpaste | pandoc -f mediawiki -t markdown | pbcopy

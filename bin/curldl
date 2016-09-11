@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+###
+#
+# Converts curl command to aria2c compatible.
+#
+# Usage: curldl [-f filename] [curl_command]
+#
+###
+
+# curl_command
+curl_command=''
+
+case $# in
+    0)
+        # assume: cat data | ./curldl
+        read curl_command;
+        ;;
+    1)
+        # assume: ./curldl <curl_command>
+        curl_command=$1
+        ;;
+    2)
+        # assume: cat data | ./curldl -f <filename>
+        read curl_command;
+        ;;
+    3)
+        # assume: ./curldl -f <filename> <curl_command>
+        curl_command=$3
+        ;;
+    *)
+        echo "Usage: ${0##*/} [-f filename] [curl_command]"
+        exit 1
+esac
+
+# capture any options
+filename=''
+
+while getopts ":f:" opt; do
+  case $opt in
+    f)
+      filename="$OPTARG"
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+    :)
+      echo "Option -$OPTARG requires an argument." >&2
+      exit 1
+      ;;
+  esac
+done
+
+# validation
+if [ "${#curl_command}" -le 0 ]
+then
+    echo "Usage: ${0##*/} [-f filename] [curl_command]"
+    exit 1
+fi
+
+regex='^curl'
+
+if [[ ! "$curl_command" =~ $regex ]]
+then
+
+    echo "curl_command doesn't begin with curl: $curl_command"
+    echo "Usage: ${0##*/} [-f filename] [curl_command]"
+    exit 1
+fi
+
+# convert to aria2c compatible
+
+# replace -h with --header=
+substring="-H '"
+replacement="--header='"
+
+aria_command=${curl_command//$substring/$replacement}
+
+
+# replace --compress with --http-accept-gzip=true
+substring="--compressed"
+replacement="--http-accept-gzip=true"
+
+aria_command=${aria_command/$substring/$replacement}
+
+
+# replace curl with aria2c -x16 -s20 -k1M
+substring="curl"
+replacement="aria2c -x16 -s20 -k1M"
+
+aria_command=${aria_command/$substring/$replacement}
+
+
+if [ "${#filename}" -ge 0 ]
+then
+    echo "Saving as: $filename"
+    aria_command+=' --out='"$filename"
+fi
+
+echo -e "Command:\n"
+echo "$aria_command"
+echo -e "\n"
+
+# execute command
+eval "$aria_command"

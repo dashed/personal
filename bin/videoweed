@@ -1,0 +1,131 @@
+#!/usr/bin/env node
+/**
+ * Download videoweed files using JavaScript (Node.js)
+ *
+ * Requirements:
+ * npm install commander -g
+ * npm install phantom -g
+ * phantomjs
+ * aria2c
+ */
+
+var
+// node
+spawn = require('child_process').spawn,
+url = require('url'),
+assert = require('assert'),
+http = require("http"),
+events = require('events'),
+
+// misc
+program = require('commander'),
+phantom = require('phantom'),
+
+bus = new events.EventEmitter(),
+out_file = void 0,
+vw_key = void 0;
+
+// commander
+program
+  .version('0.0.1')
+  .usage('[options] <videoweed key>')
+  .option('-o, --out <n>', 'output file')
+  .parse(process.argv);
+
+// Fetch ep-num, if any
+if(program.out)
+    out_file = program.out;
+
+// Ensure videoweed URL is given
+if(program.args <= 0) {
+    console.log('Enter videoweed key!');
+    return;
+}
+
+vw_key = program.args[0].trim();
+
+// Validate videoweed key
+assert(new RegExp('^[a-zA-Z0-9]+?$').test(vw_key), "Must be valid videoweed key!");
+
+console.log('videoweed key validated.');
+
+// Validate URL
+
+var vw_url = url.format({
+    protocol: 'http:',
+    hostname: 'www.videoweed.es',
+    pathname: '/file/' + vw_key
+});
+
+// Fetch videoweed API params (flashvars)
+
+console.log('Fetching videoweed flashvars from: ' + vw_url);
+
+phantom.create('--load-images=false',function(ph) {
+    ph.createPage(function(page) {
+        page.open(vw_url, function(status) {
+
+            page.evaluate((function() {
+                return window.flashvars;
+            }), function(result) {
+                if (result) {
+                    bus.emit('flashvars', result);
+                    // console.log(JSON.stringify(result));
+                } else {
+                    console.log("No flashvars.");
+                }
+                return ph.exit();
+            });
+        });
+    });
+});
+
+
+bus.on('flashvars', function(output) {
+    var options = {
+      host: 'www.videoweed.es',
+      path:'/api/player.api.php?file=' + output.file + '&key=' + output.filekey,
+      // headers: {'user-agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:10.0a1) Gecko/20111029 Firefox/10.0a1'},
+    };
+
+    callback = function(response) {
+      var str = '';
+
+      response.on('data', function (chunk) {
+        str += chunk;
+      });
+
+      response.on('end', function () {
+        bus.emit('api', str);
+      });
+    }
+
+    http.request(options, callback).end();
+});
+
+// Download the video
+bus.on('api', function(output) {
+    var
+    matches = /url=(.+?)&/.exec(output);
+
+    assert(matches, "Could not fetch API info");
+
+    var
+    flv_url = matches[1],
+    args = [];
+
+    console.log('Fetched flv url: ' + flv_url);
+
+    args.push('-x16');
+    args.push('-s20');
+    args.push('-k1M');
+
+    if(out_file)
+        args.push('--out=' + out_file);
+
+    args.push(flv_url);
+
+    console.log('Executing: aria2c ' + args.join(' '));
+
+    spawn('aria2c', args, { stdio: 'inherit' });
+});

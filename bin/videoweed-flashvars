@@ -1,0 +1,22 @@
+#!/usr/bin/env coffee
+###
+Dumps flashvars in JSON.
+
+Note: Don't forget to set NODE_PATH!
+0. npm install -g coffee-script (convert to vanilla as needed)
+1. Install phantomjs and put it in path (/usr/local/bin)
+2. Install https://github.com/sgentle/phantomjs-node via npm
+###
+phantom = require 'phantom'
+if !(process.argv.length > 2 and typeof process.argv[2] is "string" and process.argv[2].length > 0)
+  console.log("Requires URL.")
+  return
+phantom.create (ph) ->
+  ph.createPage (page) ->
+    page.open process.argv[2], (status) ->
+      page.evaluate (-> window.flashvars), (result) ->
+        if result
+          console.log(JSON.stringify(result))
+        else
+          console.log("No flashvars.")
+        ph.exit()

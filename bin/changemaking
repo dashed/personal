@@ -1,0 +1,36 @@
+#!/usr/bin/python
+#
+# source: http://www.bryceboe.com/2009/11/04/dynamic-programming-%E2%80%93-coin-change-problem-in-python/
+#         http://stackoverflow.com/questions/621062/python-function-find-change-from-purchase-amount
+# info: http://en.wikipedia.org/wiki/Change-making_problem
+#
+# file: /usr/local/bin/changemaking
+#
+# usage: changemaking <amount in cents>
+#
+# Helpful for when ordering pizza deliveries!
+#
+
+from optparse import OptionParser
+
+parser = OptionParser()
+(options, args) = parser.parse_args()
+value = int(args[0])
+
+def change(amount):
+    money = ()
+    for coin in [25,10,5,1]:
+        if amount < coin:
+            continue
+        num = amount/coin
+        if num > 0:
+            money += (coin,) * num
+            amount -= coin * num
+            print '%d of %d' % (num, coin)
+
+
+    return money
+
+result = list(change(value))
+
+print '%d coins: %s' % (len(result), result)

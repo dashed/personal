@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#
+# Usage: musicdl <url supported by youtube-dl>
+#
+# Description: Fetch media using youtube-dl and extracts audio.
+#
+
+# update youtube-dl to latest version
+youtube-dl -U
+
+# incantation
+youtube-dl -o '%(title)s.%(ext)s' --restrict-filenames --extract-audio -v --audio-quality 0 --embed-thumbnail --add-metadata "$1"

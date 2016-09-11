@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# rar! ~ Dashed
+# http://www.linuxjournal.com/content/grabbing-your-music-youtube-do-it-your-way
+
+address=$1 
+regex='v=(.*)'
+
+if [[ $address =~ $regex ]]; then
+	video_id=${BASH_REMATCH[1]}
+	video_id=$(echo $video_id | cut -d'&' -f1)
+    video_title_="$(youtube-dl --get-title $address)"
+	video_title=$(printf '%q' "$video_title_")
+	youtube-dl $address
+
+	if [ -e $video_id.flv ]; then
+		ext="flv"
+	fi
+
+	if [ -e $video_id.mp4 ]; then
+		ext="mp4"
+	fi
+
+	if [ -e $video_id.webm ]; then
+		ext="webm"
+	fi
+
+
+	# source: http://ffmpeg.org/trac/ffmpeg/wiki/Encoding%20VBR%20(Variable%20Bit%20Rate)%20mp3%20audio
+	# source2: http://wiki.hydrogenaudio.org/index.php?title=LAME#Recommended_encoder_settings
+	ffmpeg -i $video_id.$ext -q:a 0 ./$video_id.mp3
+	
+	mv $video_id.mp3 ./"$video_title_.mp3"
+	rm $video_id.$ext
+
+else
+    echo "Sorry but the system encountered a problem." 
+fi
+

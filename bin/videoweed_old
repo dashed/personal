@@ -1,0 +1,185 @@
+#!/usr/local/bin/python
+#
+# TO DO: Refactor to a node.js cli app.
+#
+# Prereqs:
+#   * python 2 or 3
+#   * plumbum 
+#   * aria2c
+#   * videoweed-flashvars
+# ========================================================================
+#
+# This is free and unencumbered software released into the public domain.
+
+# Anyone is free to copy, modify, publish, use, compile, sell, or
+# distribute this software, either in source code form or as a compiled
+# binary, for any purpose, commercial or non-commercial, and by any
+# means.
+
+# In jurisdictions that recognize copyright laws, the author or authors
+# of this software dedicate any and all copyright interest in the
+# software to the public domain. We make this dedication for the benefit
+# of the public at large and to the detriment of our heirs and
+# successors. We intend this dedication to be an overt act of
+# relinquishment in perpetuity of all present and future rights to this
+# software under copyright law.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+# IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+# OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+
+# For more information, please refer to <http://unlicense.org/>
+#
+# ========================================================================
+
+
+
+# Native imports
+import sys, urllib, re, urllib2
+from urllib import urlopen
+from urlparse import urlparse
+
+# Check stage
+try:
+    from plumbum import cli, FG, local
+except ImportError, e:    
+    print "plumbum module doesn't exist!"
+    print "See https://github.com/tomerfiliba/plumbum"
+    sys.exit()
+
+try:
+    from plumbum.cmd import aria2c
+except ImportError, e:    
+    print "aria2c is not installed on this system"
+    print "See http://aria2.sourceforge.net/"
+    sys.exit()
+
+videoweed_flashvars = local['videoweed-flashvars']
+
+# Configure aria2c
+aria2c_config = aria2c['-x16', '-s20', '-k1M']
+
+class MyCompiler(cli.Application):
+
+    _output_name = None
+
+    verbose = cli.Flag(["-v", "--verbose"], help = "Enable verbose mode")
+
+
+    def main(self, videofile):
+
+        if self.validate_url(videofile):
+            self.scrape_url(videofile)
+
+    @cli.switch("-o", str, help = 'Set the output filename.')
+    def output_name(self, outputname):
+
+        if len(outputname) <= 0:
+            raise ValueError("outputname length is 0")
+
+        self._output_name = outputname
+
+    def scrape_url(self, videofile):
+
+        if self.verbose:
+            print "Fetching api params"
+
+        import json
+        _json_output = (videoweed_flashvars[videofile])()
+        jdata = json.loads(_json_output)
+
+        
+        try:
+
+            # Videoweed no longer stores the flashvars in the code
+            # Fetch source content
+            # content = urlopen(videofile).read()
+            
+            # _file_id = re.compile('flashvars.file="([a-zA-Z0-9]+?)";').search(content)
+            # file_id = _file_id.group(1)
+
+            # _file_key = re.compile('flashvars.filekey="(.+?)";').search(content)
+            # file_key = _file_key.group(1)
+
+            file_id = jdata['file']
+            file_key = jdata['filekey']
+
+            if self.verbose:
+                print "Fetched api file id: " + file_id
+                print "Fetched api file key: " + file_key
+
+
+            # Set up api url
+            data = {}
+            data['user'] = 'undefined'
+            data['file'] = file_id
+            data['pass'] = 'undefined'
+            data['key'] = file_key
+            #data['codes'] = '1'
+            url_values = urllib.urlencode(data)
+
+            url = 'http://www.videoweed.es/api/player.api.php?' + url_values
+            
+
+            req = urllib2.Request(url)
+            
+            # Somehow needs user agent
+            user_agent = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:10.0a1) Gecko/20111029 Firefox/10.0a1'
+            req.add_header('User-Agent', user_agent)
+            response = urllib2.urlopen(req)
+            link=response.read()
+            finalurl = re.compile('url=(.+?)&').findall(link)[0]
+
+            if self.verbose:
+                print "Fetched flv url: " + finalurl
+
+
+        except:
+            print "Invalid videoweed url."
+            return            
+
+        if self._output_name != None:
+
+            aria2c_out_flag = aria2c_config['--out=' + self._output_name + '.flv']
+            aria2c_url_out_flag = aria2c_out_flag[finalurl]
+
+            if self.verbose:
+                print "Fetching flv file using command: " + str(aria2c_url_out_flag)
+
+            (aria2c_url_out_flag) & FG
+
+        else:
+
+            aria2c_url = aria2c_config[finalurl]
+
+            if self.verbose:
+                print "Fetching flv file using command: " + str(aria2c_url)
+            
+            (aria2c_url) & FG
+
+
+    def validate_url(self, videofile):
+
+        if self.verbose:
+            print "Validating video url: " + videofile
+
+        try:
+            pieces = urlparse(videofile)
+            assert pieces.netloc == 'www.videoweed.es'
+
+            assert re.compile('^/file/[a-zA-Z0-9]+?$').match(pieces.path) != None
+
+
+        except AssertionError:
+            print "Invalid videoweed url."
+            return False
+
+        return True
+
+
+if __name__ == "__main__":
+    MyCompiler.run()
