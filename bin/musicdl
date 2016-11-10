@@ -9,4 +9,4 @@
 youtube-dl -U
 
 # incantation
-youtube-dl -o '%(title)s.%(ext)s' --restrict-filenames --extract-audio -v --audio-quality 0 --embed-thumbnail --add-metadata "$1"
+youtube-dl -o '%(title)s.%(ext)s' -f m4a --restrict-filenames --extract-audio -v --audio-quality 0 --add-metadata "$1"
