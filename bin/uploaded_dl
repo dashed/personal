@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+#
+# Adapted from:
+# https://gehrcke.de/2015/03/uploaded-to-download-with-wget/
+#
+# Deps:
+# - wget
+# - aria2c
+
+USERNAME="$UPLOADED_USERNAME"
+PASSWORD="$UPLOADED_PASSWORD"
+
+UPLOADED_URL="$1"
+
+TMPDIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'mytmpdir')
+# Install trap that removes the temporary directory recursively
+# upon exit (except for when this program retrieves SIGKILL).
+trap 'rm -rf "$TMPDIR"' EXIT
+
+LOGINRESPFILE="${TMPDIR}/login.response"
+LOGINOUTPUTFILE="${TMPDIR}/login.outerr"
+COOKIESFILE="${TMPDIR}/login.cookies"
+LOGINURL="http://uploaded.net/io/login"
+
+echo "Temporary directory: ${TMPDIR}"
+echo "Log in via POST request to ${LOGINURL}, save cookies."
+wget --save-cookies="${COOKIESFILE}" --server-response --output-document "${LOGINRESPFILE}" --post-data="id=${USERNAME}&pw=${PASSWORD}" ${LOGINURL} > "${LOGINOUTPUTFILE}" 2>&1
+
+# Status code is 200 even if login failed.
+# Uploaded sends a '{"err":"User and password do not match!"}'-like response
+# body in case of error.
+
+echo "Verify that login response is empty."
+# Response is more than 0 bytes in case of login error.
+if [ -s "${LOGINRESPFILE}" ]; then
+    echo "Login response larger than 0 bytes. Print response and exit." >&2
+    cat "${LOGINRESPFILE}"
+    exit 1
+fi
+
+# Zero response size does not necessarily imply successful login.
+# Wget adds three commented lines to the cookies file by default, so
+# set cookies should result in more than three lines in this file.
+COOKIESFILELINES="$(cat "${COOKIESFILE}" | wc -l)"
+echo "${COOKIESFILELINES} lines in cookies file found."
+if [ "${COOKIESFILELINES}" -lt "4" ]; then
+    echo "Expected >3 lines in cookies file. Exit.". >&2
+    exit 1
+fi
+
+
+TMPFILE="$(mktemp "${TMPDIR:-/tmp}"/response.html.XXXX)"
+echo "GET ${UPLOADED_URL} (use auth cookie), store response."
+wget --no-verbose --load-cookies="${COOKIESFILE}" \
+    --output-document "${TMPFILE}" "${UPLOADED_URL}"
+
+if [ ! -s "${TMPFILE}" ]; then
+    echo "No HTML response: ${TMPFILE} is zero size. Skip processing."
+    exit 1
+fi
+
+# Extract (temporarily valid) download URL from HTML.
+LINEOFINTEREST="$(grep post "${TMPFILE}" | grep action | grep uploaded)"
+
+# Match entire line, include space after action="bla" , replace
+# entire line with first group, which is bla.
+DLURL=$(echo "$LINEOFINTEREST" | sed 's/.*action="\(.*\)" .*/\1/')
+echo "Extracted download URL: ${DLURL}"
+# This file contains account details, so delete as soon as not required
+# anymore.
+rm -f "${TMPFILE}"
+echo "POST to URL w/o data. Response is file. Get filename from header."
+# --content-disposition should extract the proper filename.
+# wget --content-disposition --post-data='' "${DLURL}"
+aria2c --file-allocation=none -x16 -s20 -k1M "${DLURL}"
