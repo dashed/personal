@@ -1,45 +1,34 @@
 {
-	"bold_folder_labels": true,
-	"caret_style": "phase",
-	"color_scheme": "Packages/Boxy Theme/schemes/Boxy Ocean.tmTheme",
-	"detect_indentation": true,
-	"ensure_newline_at_eof_on_save": true,
-	"fade_fold_buttons": false,
-	"font_face": "Roboto Mono",
-	"font_size": 18.0,
-	"highlight_line": true,
-	"highlight_modified_tabs": true,
-	"ignored_packages":
-	[
-		"Markdown",
-		"Rust",
-		"Vintage"
-	],
-	"line_padding_bottom": 1,
-	"line_padding_top": 1,
-	"open_files_in_new_window": false,
-	"remember_open_files": true,
-	"rulers":
-	[
-		80
-	],
-	"scroll_past_end": true,
-	"show_tab_close_buttons": false,
-	"spell_check": false,
-	"tab_size": 4,
-	"theme": "Boxy Ocean.sublime-theme",
-	"theme_button_rounded": true,
-	"theme_find_panel_font_md": true,
-	"theme_find_panel_materialized": true,
-	"theme_icon_button_highlighted": true,
-	"theme_scrollbar_semi_overlayed": true,
-	"theme_tab_line_size_lg": true,
-	"theme_tab_selected_overlined": true,
-	"theme_tab_separator": true,
-	"theme_tab_size_xs": true,
-	"theme_unified": true,
-	"translate_tabs_to_spaces": true,
-	"trim_automatic_white_space": true,
-	"trim_trailing_white_space_on_save": true,
-	"wide_caret": true
+    "bold_folder_labels": true,
+    "caret_style": "phase",
+    "color_scheme": "Packages/Oceanic Next Color Scheme/Oceanic Next.tmTheme",
+    "detect_indentation": true,
+    "ensure_newline_at_eof_on_save": true,
+    "fade_fold_buttons": false,
+    "font_face": "Roboto Mono",
+    "font_size": 18.0,
+    "highlight_line": true,
+    "highlight_modified_tabs": true,
+    "ignored_packages":
+    [
+        "Rust",
+        "Vintage"
+    ],
+    "line_padding_bottom": 1,
+    "line_padding_top": 1,
+    "open_files_in_new_window": false,
+    "remember_open_files": true,
+    "rulers":
+    [
+        80
+    ],
+    "scroll_past_end": true,
+    "show_tab_close_buttons": false,
+    "spell_check": false,
+    "tab_size": 4,
+    "theme": "Adaptive.sublime-theme",
+    "translate_tabs_to_spaces": true,
+    "trim_automatic_white_space": true,
+    "trim_trailing_white_space_on_save": true,
+    "wide_caret": true
 }
