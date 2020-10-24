@@ -6,7 +6,8 @@
 #
 
 # update youtube-dl to latest version
-youtube-dl -U
+# Commented out due to https://github.com/github/dmca/blob/master/2020/10/2020-10-23-RIAA.md
+# youtube-dl -U
 
 # incantation
 youtube-dl -o '%(title)s.%(ext)s' -f m4a --restrict-filenames --extract-audio -v --audio-quality 0 --add-metadata "$1"
