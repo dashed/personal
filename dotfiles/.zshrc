@@ -116,3 +116,5 @@ alias aaa="cd ~/aaa/"
 alias ledger="cd ~/aaa/ledger"
 alias github="cd ~/aaa/github"
 alias notes="cd ~/aaa/notes"
+# https://github.com/aria2/aria2
+alias aria2cdl="aria2c -x16 -s20 -k1M"
