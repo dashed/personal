@@ -85,6 +85,10 @@ source $ZSH/oh-my-zsh.sh
 
 # User configuration
 
+# https://superuser.com/questions/1245273/iterm2-version-3-individual-history-per-tab
+unsetopt inc_append_history
+unsetopt share_history
+
 export PATH="/Users/me/.local/bin:$PATH"
 # export MANPATH="/usr/local/man:$MANPATH"
 
@@ -118,3 +122,12 @@ alias github="cd ~/aaa/github"
 alias notes="cd ~/aaa/notes"
 # https://github.com/aria2/aria2
 alias aria2cdl="aria2c -x16 -s20 -k1M"
+
+# Things added externally
+
+# (start) For sentry development
+export VOLTA_HOME="$HOME/.volta"
+export PATH="$VOLTA_HOME/bin:$PATH"
+eval "$(pyenv init -)"
+eval "$(direnv hook zsh)"
+# (end) For sentry development
