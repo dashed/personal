@@ -15,10 +15,8 @@ export ZSH="/Users/me/.oh-my-zsh"
 # ZSH_THEME="robbyrussell"
 #
 # Using this instead.
-# https://github.com/denysdovhan/spaceship-prompt
-# Requires: https://github.com/powerline/fonts
-# For iterm2, use "Roboto Mono for Powerline" font at size 18
-ZSH_THEME="spaceship"
+# https://starship.rs/guide/#%F0%9F%9A%80-installation
+ZSH_THEME=""
 SPACESHIP_EXIT_CODE_SHOW="true"
 
 # Set list of themes to pick from when loading at random
@@ -128,6 +126,7 @@ alias aria2cdl="aria2c -x16 -s20 -k1M"
 # (start) For sentry development
 export VOLTA_HOME="$HOME/.volta"
 export PATH="$VOLTA_HOME/bin:$PATH"
+eval "$(starship init zsh)"
 eval "$(pyenv init -)"
 eval "$(direnv hook zsh)"
 # (end) For sentry development
