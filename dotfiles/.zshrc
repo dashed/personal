@@ -77,7 +77,12 @@ SPACESHIP_EXIT_CODE_SHOW="true"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git)
+# 
+# install zsh-autosuggestions with:
+#    cd $ZSH_CUSTOM/plugins
+#    git clone git@github.com:zsh-users/zsh-autosuggestions.git
+# 
+plugins=(git zsh-autosuggestions)
 
 source $ZSH/oh-my-zsh.sh
 
