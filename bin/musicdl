@@ -10,4 +10,12 @@
 # youtube-dl -U
 
 # incantation
-youtube-dl -o '%(title)s.%(ext)s' -f m4a --restrict-filenames --extract-audio -v --audio-quality 0 --add-metadata "$1"
+# youtube-dl -o '%(title)s.%(ext)s' -f m4a --restrict-filenames --extract-audio -v --audio-quality 0 --add-metadata "$1"
+
+# https://github.com/yt-dlp/yt-dlp
+# Install:
+# brew install yt-dlp
+#
+# Update:
+# brew upgrade yt-dlp
+yt-dlp --output '%(title)s.%(ext)s' --format m4a --restrict-filenames --extract-audio --verbose --audio-quality 0 --add-metadata "$1"
