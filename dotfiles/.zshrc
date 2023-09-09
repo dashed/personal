@@ -125,6 +125,8 @@ alias github="cd ~/aaa/github"
 alias notes="cd ~/aaa/notes"
 # https://github.com/aria2/aria2
 alias aria2cdl="aria2c -x16 -s20 -k1M"
+alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+
 
 # Things added externally
 
@@ -135,3 +137,16 @@ eval "$(starship init zsh)"
 eval "$(pyenv init -)"
 eval "$(direnv hook zsh)"
 # (end) For sentry development
+
+# https://www.haskell.org/ghcup/install/
+# ghcup-env
+[ -f "/Users/me/.ghcup/env" ] && source "/Users/me/.ghcup/env" 
+
+# https://github.com/mitsuhiko/rye
+source "$HOME/.rye/env"
+
+# brew install fzf
+
+# # To install useful key bindings and fuzzy completion:
+# $(brew --prefix)/opt/fzf/install
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
