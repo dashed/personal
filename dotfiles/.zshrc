@@ -150,3 +150,9 @@ source "$HOME/.rye/env"
 # # To install useful key bindings and fuzzy completion:
 # $(brew --prefix)/opt/fzf/install
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+# find-in-file - usage: fif [directory]
+# Use current directory as default.
+fif() {
+    rg --no-line-number --no-heading "${1:-.}" | fzf | sed 's/[^:]*://' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\n' | pbcopy
+}
