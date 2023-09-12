@@ -151,8 +151,37 @@ source "$HOME/.rye/env"
 # $(brew --prefix)/opt/fzf/install
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
+# brew install bat
+# https://github.com/sharkdp/bat
+export BAT_THEME="TwoDark"
+
 # find-in-file - usage: fif [directory]
 # Use current directory as default.
 fif() {
-    rg --no-line-number --no-heading "${1:-.}" | fzf | sed 's/[^:]*://' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\n' | pbcopy
+    # rg --no-line-number --no-heading "${1:-.}" | fzf | sed 's/[^:]*://' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\n' | pbcopy
+    rg --line-number --no-heading "${1:-.}" |
+    fzf --color "hl:-1:underline,hl+:-1:underline:reverse" \
+        --delimiter : \
+        --preview 'bat --color=always {1} --highlight-line {2}' \
+        --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' \
+        --nth=1,3.. |
+    sed 's/[^:]*:[^:]*://' |
+    sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' |
+    tr -d '\n' |
+    pbcopy
+
+}
+
+# find-in-[files-and-open-with-]vscode - usage: fiv [directory]
+# Use current directory as default.
+fiv() {
+    # Requires in path: /usr/local/bin/code
+    rg --line-number --no-heading "${1:-.}" |
+    fzf --color "hl:-1:underline,hl+:-1:underline:reverse" \
+        --delimiter : \
+        --preview 'bat --color=always {1} --highlight-line {2}' \
+        --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' \
+        --nth=1,3.. \
+        --bind 'enter:become(code --goto {1}:{2})'
+
 }
