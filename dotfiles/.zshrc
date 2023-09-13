@@ -146,10 +146,12 @@ eval "$(direnv hook zsh)"
 source "$HOME/.rye/env"
 
 # brew install fzf
-
-# # To install useful key bindings and fuzzy completion:
+# To install useful key bindings and fuzzy completion:
 # $(brew --prefix)/opt/fzf/install
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+# https://github.com/junegunn/fzf-git.sh
+[ -f ~/.fzf-git.sh ] && source ~/.fzf-git.sh
 
 # brew install bat
 # https://github.com/sharkdp/bat
