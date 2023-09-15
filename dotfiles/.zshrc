@@ -187,3 +187,22 @@ fiv() {
         --bind 'enter:become(code --goto {1}:{2})'
 
 }
+
+# find-in-directory - usage: fid
+fid() {
+    fd |
+    fzf --color "hl:-1:underline,hl+:-1:underline:reverse" \
+        --preview 'bat --color=always {1}' \
+        --preview-window 'up,60%,border-bottom,~3' \
+}
+
+export FZF_CTRL_T_OPTS="
+    --preview 'bat -n --color=always {}'
+    --preview-window 'up,60%,border-bottom,~3'"
+
+export FZF_CTRL_R_OPTS="
+    --preview 'echo {}' --preview-window up:3:hidden:wrap
+    --bind 'ctrl-/:toggle-preview'
+    --bind 'ctrl-y:execute-silent(echo -n {2..} | pbcopy)+abort'
+    --color header:italic
+    --header 'Press CTRL-Y to copy command into clipboard. Press CTRL-/ to toggle preview.'"
