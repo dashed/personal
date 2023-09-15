@@ -155,14 +155,13 @@ source "$HOME/.rye/env"
 
 # brew install bat
 # https://github.com/sharkdp/bat
-export BAT_THEME="TwoDark"
+export BAT_THEME="OneHalfDark"
 
 # find-in-file - usage: fif [directory]
 # Use current directory as default.
 fif() {
-    # rg --no-line-number --no-heading "${1:-.}" | fzf | sed 's/[^:]*://' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr -d '\n' | pbcopy
     rg --line-number --no-heading "${1:-.}" |
-    fzf --color "hl:-1:underline,hl+:-1:underline:reverse" \
+    fzf --color "hl:-1:reverse,hl+:-1:underline:reverse" \
         --delimiter : \
         --preview 'bat --color=always {1} --highlight-line {2}' \
         --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' \
@@ -179,7 +178,7 @@ fif() {
 fiv() {
     # Requires in path: /usr/local/bin/code
     rg --line-number --no-heading "${1:-.}" |
-    fzf --color "hl:-1:underline,hl+:-1:underline:reverse" \
+    fzf --color "hl:-1:reverse,hl+:-1:underline:reverse" \
         --delimiter : \
         --preview 'bat --color=always {1} --highlight-line {2}' \
         --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' \
@@ -191,7 +190,7 @@ fiv() {
 # find-in-directory - usage: fid
 fid() {
     fd |
-    fzf --color "hl:-1:underline,hl+:-1:underline:reverse" \
+    fzf --color "hl:-1:reverse,hl+:-1:underline:reverse" \
         --preview 'bat --color=always {1}' \
         --preview-window 'up,60%,border-bottom,~3' \
 }
