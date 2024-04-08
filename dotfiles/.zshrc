@@ -173,18 +173,31 @@ fif() {
 
 }
 
-# find-in-[files-and-open-with-]vscode - usage: fiv [directory]
-# Use current directory as default.
+# find-in-[files-and-open-with-]vscode - usage: fiv [RIPGREP_PATTERN]
+# Search in current directory with ripgrep.
+# RIPGREP_PATTERN is an optional regex pattern that ripgrep understands.
+# RIPGREP_PATTERN defaults to the regex pattern: .
 fiv() {
-    # Requires in path: /usr/local/bin/code
-    rg --line-number --no-heading "${1:-.}" |
-    fzf --color "hl:-1:reverse,hl+:-1:underline:reverse" \
-        --delimiter : \
-        --preview 'bat --color=always {1} --highlight-line {2}' \
-        --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' \
-        --nth=1,3.. \
-        --bind 'enter:become(code --goto {1}:{2})'
-
+    # Requires vscode to be in path: /usr/local/bin/code
+    local _fiv_rg_path="${1:-.}"
+    
+    if [[ -d "$_fiv_rg_path" ]]; then
+        rg --line-number --no-heading . "$_fiv_rg_path" |
+        fzf --color "hl:-1:reverse,hl+:-1:underline:reverse" \
+            --delimiter : \
+            --preview 'bat --color=always {1} --highlight-line {2}' \
+            --preview-window 'up,60%,border-bottom,+{2}+3/3,~3' \
+            --nth=1,3.. \
+            --bind 'enter:become(code --goto {1}:{2})'
+    else
+        rg --line-number --no-heading . "$_fiv_rg_path" |
+        fzf --color "hl:-1:reverse,hl+:-1:underline:reverse" \
+            --delimiter : \
+            --preview "bat --color=always '$_fiv_rg_path' --highlight-line {1}" \
+            --preview-window 'up,60%,border-bottom,+{1}+3/3,~3' \
+            --nth=2.. \
+            --bind "enter:become(code --goto '$_fiv_rg_path':{1})"
+    fi
 }
 
 # find-in-directory - usage: fid
