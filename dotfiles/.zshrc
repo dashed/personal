@@ -173,10 +173,9 @@ fif() {
 
 }
 
-# find-in-[files-and-open-with-]vscode - usage: fiv [RIPGREP_PATTERN]
-# Search in current directory with ripgrep.
-# RIPGREP_PATTERN is an optional regex pattern that ripgrep understands.
-# RIPGREP_PATTERN defaults to the regex pattern: .
+# find-in-[files-and-open-with-]vscode - usage: fiv [path]
+# Fuzzy find in files and open with vscode.
+# By default searches in current directory.
 fiv() {
     # Requires vscode to be in path: /usr/local/bin/code
     local _fiv_rg_path="${1:-.}"
