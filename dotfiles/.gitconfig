@@ -1,0 +1,37 @@
+# ~/.gitconfig
+[filter "lfs"]
+	required = true
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+[user]
+	name = Alberto Leal
+	email = mail4alberto@gmail.com
+[core]
+	excludesfile = /Users/me/.gitignore_global
+	editor = vim
+[difftool "sourcetree"]
+	cmd = opendiff \"$LOCAL\" \"$REMOTE\"
+	path = 
+[mergetool "sourcetree"]
+	cmd = /Applications/Sourcetree.app/Contents/Resources/opendiff-w.sh \"$LOCAL\" \"$REMOTE\" -ancestor \"$BASE\" -merge \"$MERGED\"
+	trustExitCode = true
+[commit]
+	template = /Users/me/.stCommitMsg
+[push]
+	autoSetupRemote = true
+
+[alias]
+	# From: https://www.reddit.com/r/commandline/comments/ne90tm/branch_switching_with_fzf/
+	cob = !git checkout $(git branch | fzf)
+
+	# Force delete a branch or multiple branches
+	db = !git branch -D $(git branch | fzf --multi)
+
+	# List branches merged into origin/master
+	# git list-merged-branches
+	#
+	# List branches merged into origin/main
+	# git list-merged-branches origin/main
+	#
+    list-merged-branches = "!f() { base=${1:-origin/master}; git fetch origin; echo 'Branches merged into '$base':'; git for-each-ref --format '%(refname:short)' refs/heads | while read branch; do [ \"$branch\" != \"master\" ] && [ \"$branch\" != \"main\" ] && ! git log -1 --format=%B $branch | grep -q '^Branch: origin/' && git merge-base --is-ancestor $branch $base && echo \"  $branch\"; done; }; f"
