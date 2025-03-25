@@ -217,3 +217,84 @@ export FZF_CTRL_R_OPTS="
     --bind 'ctrl-y:execute-silent(echo -n {2..} | pbcopy)+abort'
     --color header:italic
     --header 'Press CTRL-Y to copy command into clipboard. Press CTRL-/ to toggle preview.'"
+
+# GitHub function to check recently merged branches and if they exist locally
+gh_merged_branches() {
+  # Help message
+  local usage="
+Usage: gh_merged_branches [LIMIT] [STATE] [--help|-h]
+
+Check GitHub branches that were recently merged or closed and their local status.
+
+Arguments:
+  LIMIT                 Number of branches to display (default: 15)
+  STATE                 State of PRs to check (default: merged_closed)
+                        Options: merged_closed, merged, closed, all
+
+Options:
+  -h, --help            Show this help message
+
+Examples:
+  gh_merged_branches                  # Show 15 most recent merged and closed branches
+  gh_merged_branches 30               # Show 30 most recent merged and closed branches
+  gh_merged_branches 15 merged        # Show only merged branches
+  gh_merged_branches 15 closed        # Show only closed branches
+  gh_merged_branches 15 all           # Show all PR states
+"
+
+  # Check for help flag
+  if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    echo "$usage"
+    return 0
+  fi
+
+  local limit=${1:-15}
+  local state=${2:-"merged_closed"}
+  local query="sort:updated-desc"
+
+  if [[ "$state" == "merged_closed" ]]; then
+    # Fetch both merged and closed PRs and combine them
+    GH_PAGER= gh pr list --author "@me" --state merged --limit $limit --search "$query" --json headRefName,number,mergedAt,closedAt,updatedAt,state > /tmp/merged_prs.json
+    GH_PAGER= gh pr list --author "@me" --state closed --limit $limit --search "$query" --json headRefName,number,mergedAt,closedAt,updatedAt,state > /tmp/closed_prs.json
+
+    # Combine and deduplicate by PR number, then sort by updatedAt
+    jq -s '[.[] | .[] | select(.state == "MERGED" or .state == "CLOSED")] | unique_by(.number) | sort_by(.updatedAt) | reverse | .[0:'$limit']' /tmp/merged_prs.json /tmp/closed_prs.json > /tmp/combined_prs.json
+
+    echo "Recent merged and closed branches status:"
+    jq -r '.[] | "\(.headRefName)|\(.mergedAt)|\(.closedAt)|\(.updatedAt)|\(.state)"' /tmp/combined_prs.json > /tmp/merged_branches.txt
+  else
+    # Original behavior for other states
+    GH_PAGER= gh pr list --author "@me" --state "$state" --limit $limit --search "$query" --json headRefName,mergedAt,closedAt,updatedAt,state | \
+    jq -r '.[] | "\(.headRefName)|\(.mergedAt)|\(.closedAt)|\(.updatedAt)|\(.state)"' > /tmp/merged_branches.txt
+    echo "Recent $state branches status:"
+  fi
+
+  # Count the number of lines in the file to check if it's empty
+  local line_count=$(wc -l < /tmp/merged_branches.txt | tr -d ' ')
+  if [[ $line_count -eq 0 ]]; then
+    echo "No branches found with state: $state"
+    return 0
+  fi
+
+  while IFS="|" read -r branch mergedate closedate updatedate ghstate; do
+    if [[ "$mergedate" != "null" ]]; then
+      action_date=$mergedate
+      action_verb="merged"
+    elif [[ "$closedate" != "null" ]]; then
+      action_date=$closedate
+      action_verb="closed"
+    else
+      action_date=$updatedate
+      action_verb="updated"
+    fi
+
+    action_days_ago=$(printf "%.0f" $(echo "scale=0; ($(date +%s) - $(date -jf %Y-%m-%dT%H:%M:%SZ "$action_date" +%s)) / 86400" | bc))
+    updated_days_ago=$(printf "%.0f" $(echo "scale=0; ($(date +%s) - $(date -jf %Y-%m-%dT%H:%M:%SZ "$updatedate" +%s)) / 86400" | bc))
+
+    if git rev-parse --verify "$branch" >/dev/null 2>&1; then
+      echo "✅ $branch ($action_verb $action_days_ago days ago, updated $updated_days_ago days ago, still exists locally)"
+    else
+      echo "❌ $branch ($action_verb $action_days_ago days ago, updated $updated_days_ago days ago, deleted locally)"
+    fi
+  done < /tmp/merged_branches.txt
+}
