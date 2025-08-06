@@ -34,10 +34,11 @@ help:
 	@echo "  make check        Run all checks (lint, typecheck, test)"
 	@echo ""
 	@echo "Docker Integration Testing:"
-	@echo "  make docker-test     Run comprehensive integration tests"
-	@echo "  make docker-test-all Run tests on all platforms"
-	@echo "  make test-ubuntu     Test on Ubuntu container"
-	@echo "  make docker-clean    Clean up Docker resources"
+	@echo "  make docker-test       Run tests with detailed statistics"
+	@echo "  make docker-test-quick Run tests with summary only"
+	@echo "  make docker-test-all   Run tests on all platforms"
+	@echo "  make test-ubuntu       Test on Ubuntu container"
+	@echo "  make docker-clean      Clean up Docker resources"
 
 # Install production dependencies
 install:
@@ -199,17 +200,32 @@ uninstall:
 docker-build:
 	docker build -t dotfiles-phase1-test -f Dockerfile.test .
 
-# Run all Phase 1 Docker tests
+# Run all Phase 1 Docker tests with statistics
 docker-test-all:
-	mkdir -p test-results
-	docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit
-	docker-compose -f docker-compose.test.yml down
+	@echo "Starting All Docker Integration Tests..."
+	@mkdir -p test-results
+	@docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit 2>&1 | tee test-results/docker-test-all.log | grep -E "TEST|PASSED|FAILED|SKIPPED|━━━|✓|✗|⊘|✅|❌|Pass Rate|suite" || true
+	@docker-compose -f docker-compose.test.yml down
+	@echo ""
+	@echo "=== OVERALL TEST SUMMARY ==="
+	@for service in phase1-ubuntu-default phase1-ubuntu-personal phase1-ubuntu-work phase1-debian-default; do \
+		echo -n "$$service: "; \
+		docker-compose -f docker-compose.test.yml run --rm $$service cat /tmp/test-results.json 2>/dev/null | grep -o '"status":[^,}]*' | sed 's/"status"://g' | sed 's/"//g' || echo "NO RESULTS"; \
+	done
+	@echo ""
+	@echo "Full test logs saved to test-results/"
 
-# Run single Phase 1 test (default variant)
+# Run single Phase 1 test (default variant) with statistics
 docker-test:
-	mkdir -p test-results
-	docker-compose -f docker-compose.test.yml up --build phase1-ubuntu-default
-	docker-compose -f docker-compose.test.yml down
+	@echo "Starting Docker Integration Tests..."
+	@mkdir -p test-results
+	@docker-compose -f docker-compose.test.yml up --build phase1-ubuntu-default 2>&1 | tee test-results/docker-test.log | grep -E "TEST|PASSED|FAILED|SKIPPED|━━━|✓|✗|⊘|✅|❌|Pass Rate" || true
+	@docker-compose -f docker-compose.test.yml down
+	@echo ""
+	@if docker-compose -f docker-compose.test.yml run --rm phase1-ubuntu-default cat /tmp/test-results.json 2>/dev/null; then \
+		echo ""; \
+		echo "Test results saved to test-results/"; \
+	fi
 
 # Test specific variant
 docker-test-variant:
@@ -227,6 +243,19 @@ docker-clean:
 	docker-compose -f docker-compose.test.yml down -v
 	rm -rf test-results/
 	docker system prune -f
+
+# Quick Docker test with summary only
+docker-test-quick:
+	@echo "Running Quick Docker Test..."
+	@mkdir -p test-results
+	@docker-compose -f docker-compose.test.yml up --build phase1-ubuntu-default > test-results/docker-quick.log 2>&1
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "TEST RESULTS"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@grep -E "(Total Tests|Passed|Failed|Skipped|Pass Rate|✅|❌)" test-results/docker-quick.log | tail -6 | sed 's/^[^T|P|F|S]*//' || echo "Unable to parse test results. Check test-results/docker-quick.log"
+	@docker-compose -f docker-compose.test.yml down > /dev/null 2>&1
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 
 # Test on Fedora
