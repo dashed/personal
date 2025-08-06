@@ -118,7 +118,7 @@ def validate(ctx: ExecutionContext) -> None:
         config = loader.load()
         loader.validate(config)
         
-        console.print(f"[green]✓[/green] Configuration is valid!")
+        console.print("[green]✓[/green] Configuration is valid!")
         console.print(f"  Package: {config.package.name} v{config.package.version}")
         console.print(f"  Safety: dry_run_default={config.safety.dry_run_default}")
         console.print(f"  Steps: {len(config.step)} operations defined")
@@ -149,14 +149,14 @@ def status(ctx: ExecutionContext) -> None:
             
             if stats['transactions']:
                 tx_stats = stats['transactions']
-                console.print(f"\n[bold]Transaction Statistics[/bold]")
+                console.print("\n[bold]Transaction Statistics[/bold]")
                 console.print(f"  Total: {tx_stats['total']}")
                 console.print(f"  Completed: {tx_stats['completed']}")
                 console.print(f"  Failed: {tx_stats['failed']}")
                 console.print(f"  Rolled back: {tx_stats['rolled_back']}")
             
             if current_state:
-                console.print(f"\n[bold]Current Configuration[/bold]")
+                console.print("\n[bold]Current Configuration[/bold]")
                 for item in current_state[:10]:  # Show first 10 items
                     console.print(f"  • {item['dst_path']} ({item['operation_type']})")
                 if len(current_state) > 10:
@@ -222,7 +222,7 @@ def sync(ctx: ExecutionContext) -> None:
         config = loader.load()
         loader.validate(config)
         
-        console.print(f"[bold]Syncing dotfiles[/bold]")
+        console.print("[bold]Syncing dotfiles[/bold]")
         console.print(f"  Config: {ctx.config_path}")
         console.print(f"  Variant: {ctx.variant}")
         console.print(f"  Mode: {'DRY RUN' if ctx.dry_run else 'APPLY'}")

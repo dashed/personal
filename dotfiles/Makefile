@@ -1,7 +1,7 @@
 # Dotfiles Management System - Makefile
 # Common development workflows and commands
 
-.PHONY: help install dev test lint format clean build run validate status sync
+.PHONY: help install dev test lint format clean build run validate status sync ty ty-check quick-check
 
 # Default target - show help
 help:
@@ -17,6 +17,8 @@ help:
 	@echo "  make lint         Run linters (ruff, mypy)"
 	@echo "  make format       Format code with ruff"
 	@echo "  make typecheck    Run mypy type checking"
+	@echo "  make ty           Run ty type checking (fast)"
+	@echo "  make quick-check  Run ty + ruff (fast checks)"
 	@echo ""
 	@echo "CLI Operations:"
 	@echo "  make run          Run CLI with default config"
@@ -70,6 +72,20 @@ format:
 # Type checking only
 typecheck:
 	uv run mypy src/ --strict
+
+# Fast type checking with ty
+ty:
+	uv run ty check src/
+
+# Alias for ty
+ty-check: ty
+
+# Quick checks with ty and ruff (fast feedback)
+quick-check:
+	@echo "Running quick checks with ty and ruff..."
+	uv run ty check src/
+	uv run ruff check src/ tests/
+	@echo "✅ Quick checks passed!"
 
 # Run all checks
 check: lint typecheck test

@@ -15,7 +15,7 @@ from typing import Optional, Dict, List, Any, Tuple
 from contextlib import contextmanager
 import logging
 
-from dotfiles_sync.models import TransactionContext, OperationResult
+from dotfiles_sync.models import TransactionContext
 
 logger = logging.getLogger(__name__)
 

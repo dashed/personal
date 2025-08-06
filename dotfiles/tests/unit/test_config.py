@@ -2,7 +2,6 @@
 
 import pytest
 from pathlib import Path
-from pydantic import ValidationError
 from dotfiles_sync.config import ConfigLoader, ConfigValidationError
 from dotfiles_sync.models import DotfilesConfig, Platform, OperationType
 
@@ -141,7 +140,7 @@ dst = "test"
 
 def test_filter_steps_by_variant(config_loader):
     """Test filtering steps by variant."""
-    config = config_loader.load()
+    config_loader.load()  # Ensure config loads successfully
     
     # Filter for "default" variant
     default_steps = config_loader.filter_steps_by_variant("default")
@@ -159,7 +158,7 @@ def test_filter_steps_by_variant(config_loader):
 
 def test_filter_steps_by_platform(config_loader):
     """Test filtering steps by platform."""
-    config = config_loader.load()
+    config_loader.load()  # Ensure config loads successfully
     
     # Filter for macOS platform
     macos_steps = config_loader.filter_steps_by_platform(Platform.MACOS)
@@ -172,7 +171,7 @@ def test_filter_steps_by_platform(config_loader):
 
 def test_get_safety_settings(config_loader):
     """Test getting safety settings with defaults."""
-    config = config_loader.load()
+    config_loader.load()  # Ensure config loads successfully
     safety = config_loader.get_safety_settings()
     
     # Check loaded values
@@ -247,7 +246,7 @@ def test_reload_configuration(config_loader):
 
 def test_get_raw_data(config_loader):
     """Test getting raw TOML data."""
-    config = config_loader.load()
+    config_loader.load()  # Ensure config loads successfully
     raw_data = config_loader.get_raw_data()
     
     assert raw_data is not None

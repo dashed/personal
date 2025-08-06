@@ -69,7 +69,7 @@ class ConfigLoader:
             # Format Pydantic validation errors nicely
             errors = []
             for err in e.errors():
-                loc = " -> ".join(str(l) for l in err["loc"])
+                loc = " -> ".join(str(loc_part) for loc_part in err["loc"])
                 msg = err["msg"]
                 errors.append(f"  {loc}: {msg}")
             
