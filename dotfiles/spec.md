@@ -1,4 +1,4 @@
-Below is a **safety-first design blueprint** that turns the one-off `manifest.yaml` into a **fully declarative meta-configuration layer** with comprehensive backup, security, and rollback capabilities.
+Below is a **safety-first design blueprint** using **TOML configuration** (like `Cargo.toml`) to create a **fully declarative meta-configuration layer** with comprehensive backup, security, and rollback capabilities.
 
 You can extend it to cover *anything* you might want a new machine to inherit: dotfiles, Oh-My-Zsh add-ons, Homebrew/apt packages, VS Code extensions, one-time shell hooks, secrets, OS-specific tweaks, etc.
 
@@ -45,155 +45,177 @@ The goal is that **no path or behaviour is hard-coded in the Python synchroniser
 
 ---
 
-## 3 Meta-configuration schema (YAML; call it **`meta.yaml`**)
+## 3 Meta-configuration schema (TOML; **`dotfiles.toml`**)
 
-```yaml
-# ----------------- GLOBAL METADATA -----------------
-meta:
-  repo_version: 1          # bump if you introduce breaking changes
-  default_variant: auto    # 'auto' = pick from hostname map below
-  
-  # Safety settings
-  dry_run_default: true    # SAFETY: require --apply flag to make changes
-  backup_before_modify: true  # create backups before any destructive operation
-  backup_retention_days: 30   # auto-cleanup old backups
-  max_changes_per_run: 100    # prevent runaway operations
-  
-  # Security settings
-  allowed_dst_paths:       # whitelist destination paths (default: only under $HOME)
-    - "$HOME/**"
-    - "/usr/local/bin/*"  # explicitly allow if needed
-  
-  forbidden_dst_paths:     # never allow these (takes precedence)
-    - "/etc/**"
-    - "/System/**"
-    - "$HOME/.ssh/authorized_keys"  # protect critical files
-  
-  safe_commands:           # whitelist for 'run' operations
-    - "./scripts/macos_defaults.sh"
-    - "./scripts/install_deps.sh"
-  
-  # Download verification
-  checksums:               # SHA256 hashes for external resources
-    uv-darwin-arm64: "abc123..."
-    uv-darwin-x86_64: "def456..."
-    uv-linux-x86_64: "ghi789..."
-  
-  # Validation
-  strict_mode: true        # fail on any validation error
-  require_checksums: true  # all downloads must have SHA256 verification
-  schema_version: "1.0"    # for compatibility checking
+### Why TOML over YAML?
 
-# Map substrings of hostname -> variant name
-hostname_map:
-  work-mbp: work
-  mac-personal: personal
+Similar to how Rust uses `Cargo.toml` and Python uses `pyproject.toml`, TOML provides:
+- **Type safety**: Clear distinction between strings, arrays, and tables
+- **No ambiguity**: No confusion about string quoting or indentation
+- **Explicit structure**: `[[array]]` syntax makes repeated sections obvious
+- **Better tooling**: Built-in validation and parsing in most languages
+- **Familiar patterns**: Follows conventions from Cargo.toml, pyproject.toml
+
+```toml
+# Dotfiles Configuration - Similar to Cargo.toml structure
+# This file defines all dotfile operations in a declarative, safety-first manner
+
+[package]
+name = "dotfiles"
+version = "1.0.0"
+schema_version = "1.0"
+author = "Your Name"
+description = "Personal dotfiles configuration"
+
+# Default variant selection (can be overridden by CLI or env)
+default_variant = "auto"  # auto | personal | work | etc.
+
+# Safety configuration - defaults to maximum safety
+[safety]
+dry_run_default = true           # SAFETY: require --apply flag for changes
+backup_before_modify = true      # create backups before any destructive operation  
+backup_retention_days = 30       # auto-cleanup old backups
+max_changes_per_run = 100        # prevent runaway operations
+strict_mode = true               # fail on any validation error
+require_checksums = true         # all downloads must have SHA256 verification
+
+# Security configuration
+[security]
+# Whitelist destination paths (glob patterns)
+allowed_dst_paths = [
+    "$HOME/**",
+    "/usr/local/bin/*",
+]
+
+# Never allow these paths (takes precedence over allowed)
+forbidden_dst_paths = [
+    "/etc/**",
+    "/System/**", 
+    "$HOME/.ssh/authorized_keys",
+]
+
+# Whitelist for 'run' operations
+safe_commands = [
+    "./scripts/macos_defaults.sh",
+    "./scripts/install_deps.sh",
+]
+
+# SHA256 checksums for external downloads
+[checksums]
+"uv-darwin-arm64" = "abc123..."
+"uv-darwin-x86_64" = "def456..."
+"uv-linux-x86_64" = "ghi789..."
+
+# Hostname to variant mapping
+[hostname]
+"work-mbp" = "work"
+"mac-personal" = "personal"
 
 # Secret provider configuration
-secrets:
-  provider: env            # env | 1password | vault | aws-secrets-manager
-  env_prefix: "DOTFILES_"  # for env provider
-  # vault_addr: "https://vault.example.com"  # for vault provider
-  # onepassword_vault: "Personal"  # for 1password provider
+[secrets]
+provider = "env"  # env | 1password | vault | aws-secrets-manager
+env_prefix = "DOTFILES_"
+# vault_addr = "https://vault.example.com"  # for vault provider
+# onepassword_vault = "Personal"  # for 1password provider
 
-# -------------- DECLARATIVE INSTRUCTIONS -----------
-steps:
-  #
-  # 3.1 Dotfiles (anywhere -> anywhere)
-  #
-  - op: link                # verbs: link | copy | append | template
-    src: zsh/zshrc          # path *inside* repo
-    dst: ~/.zshrc           # may use ~ or $HOME
-    variants: [all]         # explicit list or omit to mean 'all'
-    backup: true            # backup existing file before linking
+# ============== DECLARATIVE STEPS ==============
+# Each [[step]] defines an operation, similar to [[bin]] in Cargo.toml
 
-  - op: link
-    src: zsh/zshrc.work
-    dst: ~/.zshrc           # same target; later entries override earlier ones
-    variants: [work]
-    priority: 10            # explicit priority (higher wins)
+# Dotfile symlinks
+[[step]]
+op = "link"
+src = "zsh/zshrc"
+dst = "~/.zshrc"
+variants = ["all"]
+backup = true
 
-  - op: link
-    src: ssh/config.work
-    dst: ~/.ssh/config
-    variants: [work]
-    create_parent_dirs: true  # create ~/.ssh if it doesn't exist
-    parent_dir_mode: "0700"   # permissions for created parent dirs
+[[step]]
+op = "link"
+src = "zsh/zshrc.work" 
+dst = "~/.zshrc"
+variants = ["work"]
+priority = 10  # Higher priority overrides previous entries
 
-  - op: link
-    src: git/gitconfig
-    dst: ~/.gitconfig
-    platforms: [darwin, linux]  # optional extra selector
+[[step]]
+op = "link"
+src = "ssh/config.work"
+dst = "~/.ssh/config"
+variants = ["work"]
+create_parent_dirs = true
+parent_dir_mode = "0700"
 
-  #
-  # 3.2 Oh-My-Zsh custom plugins (sync whole dirs SAFELY)
-  #
-  - op: syncdir             # mirror a directory recursing
-    src: zsh_custom_plugins
-    dst: ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins
-    variants: [all]
-    # SAFETY FEATURES:
-    delete_extraneous: false  # don't delete by default
-    trash_instead_of_delete: true  # move to trash, not permanent delete
-    max_deletions: 10       # safety limit per run
-    exclude_patterns:       # never delete these
-      - ".git"
-      - "*.bak"
-      - ".DS_Store"
-    require_confirmation: true  # show what will be deleted, ask user
+[[step]]
+op = "link"
+src = "git/gitconfig"
+dst = "~/.gitconfig"
+platforms = ["darwin", "linux"]
 
-  #
-  # 3.3 Package managers with version pinning
-  #
-  - op: brew_install
-    packages:               # now with optional versions
-      - name: git
-        version: "2.40.0"   # optional: pin version
-      - name: neovim
-        version: latest     # or explicitly use latest
-      - name: jq
-    platforms: [darwin]
-    check_installed_first: true  # skip if already installed
 
-  - op: apt_install
-    packages:
-      - build-essential
-      - ripgrep
-    platforms: [linux]
-    sudo_required: true     # document when sudo is needed
+# Oh-My-Zsh custom plugins (with safety features)
+[[step]]
+op = "syncdir"
+src = "zsh_custom_plugins"
+dst = "${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins"
+variants = ["all"]
+# Safety features
+delete_extraneous = false        # Don't delete by default
+trash_instead_of_delete = true   # Move to trash, not permanent delete
+max_deletions = 10               # Safety limit per run
+exclude_patterns = [".git", "*.bak", ".DS_Store"]
+require_confirmation = true      # Ask user before deletions
 
-  #
-  # 3.4 VS Code extensions
-  #
-  - op: vscode_extensions
-    list:
-      - ms-vscode.vscode-typescript-next
-      - eamodio.gitlens
-    variants: [all]
-    check_installed_first: true
 
-  #
-  # 3.5 One-time shell hook per machine (WITH SAFETY)
-  #
-  - op: run
-    cmd: "./scripts/macos_defaults.sh"
-    checksum: "sha256:abcd1234..."  # verify script integrity
-    variants: [personal]
-    run_once: true          # tracked in state database
-    require_confirmation: true  # ask user before first run
-    timeout: 300            # seconds
-    safe_env_only: true     # run with minimal environment
+# Package managers with version pinning
+[[step]]
+op = "brew_install"
+# Use @ for version pinning, similar to npm
+packages = [
+    "git@2.40.0",     # Pinned version
+    "neovim",         # Latest version
+    "jq",
+]
+platforms = ["darwin"]
+check_installed_first = true
 
-  #
-  # 3.6 Secrets (references only, NEVER stored in repo)
-  #
-  - op: secret_ref
-    secret_name: github_token
-    provider: env              # env | 1password | vault | aws-secrets
-    env_var: GITHUB_TOKEN      # for env provider
-    dst: ~/.config/github_token  # inject at runtime, never persist decrypted
-    mode: "0600"               # permissions for created file
-    variants: [all]
+[[step]]
+op = "apt_install"
+packages = ["build-essential", "ripgrep"]
+platforms = ["linux"]
+sudo_required = true
+
+
+# VS Code extensions
+[[step]]
+op = "vscode_extensions"
+extensions = [
+    "ms-vscode.vscode-typescript-next",
+    "eamodio.gitlens",
+]
+variants = ["all"]
+check_installed_first = true
+
+
+# One-time shell hooks (with safety checks)
+[[step]]
+op = "run"
+cmd = "./scripts/macos_defaults.sh"
+checksum = "sha256:abcd1234..."  # Script integrity verification
+variants = ["personal"]
+run_once = true                   # Tracked in state database
+require_confirmation = true       # Ask user before first run
+timeout = 300                     # Seconds
+safe_env_only = true             # Minimal environment
+
+
+# Secret references (never stored in repo)
+[[step]]
+op = "secret_ref"
+secret_name = "github_token"
+provider = "env"                  # Uses [secrets] config
+env_var = "GITHUB_TOKEN"
+dst = "~/.config/github_token"
+mode = "0600"
+variants = ["all"]
 ```
 
 ### 3.1 Selector fields & Precedence
@@ -207,10 +229,16 @@ steps:
 * `priority` – explicit ordering (higher number wins)
 
 **Boolean logic:**
-- Multiple selector types = AND (e.g., `variants: [work]` AND `platforms: [darwin]`)
-- Within a selector = OR (e.g., `variants: [work, personal]` means work OR personal)
+- Multiple selector types = AND (e.g., `variants = ["work"]` AND `platforms = ["darwin"]`)
+- Within a selector = OR (e.g., `variants = ["work", "personal"]` means work OR personal)
 - Later steps override earlier ones for same dst (unless priority is set)
 - Conflicts are warned in dry-run output with resolution strategy shown
+
+**Package version syntax:**
+- `"package"` – Install latest version
+- `"package@1.2.3"` – Pin to specific version (like npm/yarn)
+- `"package@~1.2"` – Compatible versions (1.2.x)
+- `"package@^1.2"` – Minor updates allowed (1.x.x)
 
 ### 3.2 Supported verbs (safety-enhanced)
 
@@ -221,7 +249,7 @@ steps:
 | `append`            | Append text from `src` to end of `dst`                                     | Backup, idempotency check                |
 | `template`          | Render Jinja2 template with variables                                      | Sandbox, injection prevention           |
 | `syncdir`           | Mirror directory tree (safe mode by default)                               | No delete default, trash, confirmation  |
-| `brew_install`      | Install Homebrew packages                                                  | Version pinning, installed check         |
+| `brew_install`      | Install Homebrew packages (use `package@version` syntax)                   | Version pinning, installed check         |
 | `apt_install`       | Install APT packages                                                        | Version pinning, sudo awareness         |
 | `vscode_extensions` | Install VS Code extensions                                                 | Installed check                          |
 | `run`               | Run whitelisted commands only                                              | Checksum verify, timeout, confirmation  |
@@ -234,8 +262,8 @@ steps:
 ```
 dotfiles/
 │
-├── meta.yaml                # single source of truth
-├── meta.schema.json         # JSON schema for validation
+├── dotfiles.toml            # single source of truth (like Cargo.toml)
+├── dotfiles.schema.json     # JSON schema for TOML validation
 ├── checksums.txt            # SHA256 hashes for all external downloads
 ├── .backup-excludes         # patterns to never backup
 ├── .safety-config           # additional safety rules
@@ -268,8 +296,8 @@ dotfiles/
 ```text
 main()
  ├─ parse CLI (--variant, --config, --apply, --force, --rollback)
- ├─ validate meta.yaml against JSON schema
- ├─ load meta.yaml -> dict
+ ├─ validate dotfiles.toml against schema
+ ├─ load dotfiles.toml -> dict
  ├─ initialize state database (SQLite at ~/.local/state/dotfiles/state.db)
  ├─ check for incomplete transactions -> offer rollback
  │
@@ -308,9 +336,11 @@ main()
 
 ```python
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any, Dict
 import sqlite3
 import hashlib
+import tomllib  # Python 3.11+ built-in TOML parser
+# For Python < 3.11, use: import tomli as tomllib
 
 class SafetyValidator:
     """Pre-flight validation of all operations"""
@@ -362,6 +392,25 @@ class Verb:
     def validate(self, spec: dict, ctx: Context) -> list[str]: ...  # validation errors
     def apply(self, spec: dict, ctx: Context) -> bool: ...  # success/failure
     def rollback(self, spec: dict, ctx: Context): ...  # undo operation
+
+# Loading the TOML configuration
+def load_config(config_path: Path) -> Dict[str, Any]:
+    """Load and validate dotfiles.toml configuration"""
+    with open(config_path, 'rb') as f:
+        config = tomllib.load(f)
+    
+    # Validate required sections
+    required = ['package', 'safety', 'security']
+    for section in required:
+        if section not in config:
+            raise ValueError(f"Missing required section: [{section}]")
+    
+    return config
+
+# Example usage
+config = load_config(Path('dotfiles.toml'))
+steps = config.get('step', [])  # Array of steps
+safety = config['safety']  # Safety configuration table
 ```
 
 ---
@@ -572,27 +621,49 @@ dotfiles_sync --clean-backups --older-than 30
 
 ## 8 Validation & Testing
 
-### 8.1 Schema Validation (meta.schema.json)
+### 8.1 Schema Validation (dotfiles.schema.json)
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["meta", "steps"],
+  "required": ["package", "safety", "step"],
   "properties": {
-    "meta": {
+    "package": {
       "type": "object",
-      "required": ["repo_version"],
+      "required": ["name", "version"],
       "properties": {
-        "repo_version": {"type": "integer", "minimum": 1},
+        "name": {"type": "string"},
+        "version": {"type": "string"},
+        "schema_version": {"type": "string"},
+        "default_variant": {"type": "string"}
+      }
+    },
+    "safety": {
+      "type": "object",
+      "properties": {
         "dry_run_default": {"type": "boolean"},
         "backup_before_modify": {"type": "boolean"},
+        "backup_retention_days": {"type": "integer", "minimum": 1}
+      }
+    },
+    "security": {
+      "type": "object",
+      "properties": {
         "allowed_dst_paths": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "forbidden_dst_paths": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "safe_commands": {
           "type": "array",
           "items": {"type": "string"}
         }
       }
     },
-    "steps": {
+    "step": {
       "type": "array",
       "items": {
         "type": "object",
@@ -601,11 +672,15 @@ dotfiles_sync --clean-backups --older-than 30
           "op": {
             "type": "string",
             "enum": ["link", "copy", "append", "template", "syncdir", 
-                     "brew_install", "apt_install", "run", "secret_ref"]
+                     "brew_install", "apt_install", "vscode_extensions", "run", "secret_ref"]
           },
           "src": {"type": "string"},
           "dst": {"type": "string"},
           "variants": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "platforms": {
             "type": "array",
             "items": {"type": "string"}
           }
@@ -644,7 +719,7 @@ def test_checksums_present():
 ## 9 Migration Guide
 
 ### From existing dotfiles:
-1. Create `meta.yaml` with safety settings enabled
+1. Create `dotfiles.toml` with safety settings enabled
 2. Start with `dry_run_default: true` 
 3. List current dotfiles as `link` operations
 4. Run `dotfiles_sync --dry-run` to preview
@@ -655,7 +730,28 @@ def test_checksums_present():
 - **From Stow**: Convert folder structure to `link` operations
 - **From Chezmoi**: Export templates, convert to `template` operations  
 - **From yadm**: Extract bootstrap script to `run` operations
-- **From bare git**: Add `meta.yaml` layer on top
+- **From bare git**: Add `dotfiles.toml` layer on top
+
+### Example: Adding a new capability
+
+Want to auto-install asdf plugins on your personal laptop? Add to `dotfiles.toml`:
+
+```toml
+[[step]]
+op = "asdf_plugins"
+plugins = ["nodejs", "python", "golang"]  
+variants = ["personal"]
+```
+
+Then create a simple verb handler in Python:
+```python
+class AsdfPlugins(Verb):
+    name = "asdf_plugins"
+    def apply(self, spec: dict, ctx: Context) -> bool:
+        for plugin in spec["plugins"]:
+            subprocess.run(["asdf", "plugin-add", plugin], check=False)
+        return True
+```
 
 ---
 
@@ -676,15 +772,17 @@ def test_checksums_present():
 
 ## Summary
 
-This enhanced specification prioritizes **safety and security** while maintaining the flexibility of a custom dotfiles system:
+This enhanced specification uses **TOML format** (like Cargo.toml) and prioritizes **safety and security** while maintaining the flexibility of a custom dotfiles system:
 
+- **Type-safe configuration**: TOML provides clear, unambiguous syntax without YAML's pitfalls
 - **No data loss**: Automatic backups, dry-run by default, rollback capability
 - **No security breaches**: Path validation, checksum verification, command whitelisting
 - **Clear behavior**: Explicit precedence rules, conflict detection, comprehensive logging
 - **Cross-platform**: Works on Linux, macOS, Windows (WSL), ARM and x86
 - **Extensible**: Add new operations without changing core engine
 - **Testable**: Schema validation, automated tests, dry-run mode
+- **Familiar patterns**: Follows conventions from Cargo.toml, pyproject.toml
 
-The system is designed to **fail safely** – any error triggers automatic rollback, and destructive operations require explicit confirmation. You can confidently manage dotfiles across all your machines without fear of breaking critical configurations.
+The system is designed to **fail safely** – any error triggers automatic rollback, and destructive operations require explicit confirmation. With TOML's clarity and built-in safety features, you can confidently manage dotfiles across all your machines without fear of breaking critical configurations.
 
 Happy (and safe) hacking!
