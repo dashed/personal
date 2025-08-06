@@ -119,12 +119,12 @@ src/verbs/
 ```
 
 #### Features
-- [x] `link` operation with validation
-- [x] `copy` operation with checksum comparison
-- [x] Transaction tracking in database
-- [x] Basic rollback capability
-- [x] Dry-run mode (default)
-- [x] `--apply` flag for actual execution
+- [ ] `link` operation with validation
+- [ ] `copy` operation with checksum comparison
+- [ ] Transaction tracking in database
+- [ ] Basic rollback capability
+- [ ] Dry-run mode (default)
+- [ ] `--apply` flag for actual execution
 
 ### Success Criteria
 - [ ] Successfully link 10 different dotfiles

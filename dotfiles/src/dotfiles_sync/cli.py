@@ -17,6 +17,9 @@ from dotfiles_sync import __version__
 from dotfiles_sync.config import ConfigLoader, ConfigValidationError
 from dotfiles_sync.context import ExecutionContext
 from dotfiles_sync.database import StateDatabase
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from verbs import OperationExecutor
 
 console = Console()
 
@@ -226,10 +229,42 @@ def sync(ctx: ExecutionContext) -> None:
         console.print(f"  Config: {ctx.config_path}")
         console.print(f"  Variant: {ctx.variant}")
         console.print(f"  Mode: {'DRY RUN' if ctx.dry_run else 'APPLY'}")
+        console.print()
         
-        # TODO: Implement actual sync logic in later phases
-        console.print("\n[yellow]![/yellow] Sync operation not yet implemented (Phase 1)")
-        console.print("This will be implemented in the next phase with link/copy operations")
+        # Execute operations using the OperationExecutor
+        executor = OperationExecutor()
+        results = executor.execute_all(config, ctx)
+        
+        # Display results
+        success_count = sum(1 for r in results if r.success)
+        failure_count = len(results) - success_count
+        skipped_count = sum(1 for r in results if r.success and getattr(r, 'skipped', False))
+        
+        console.print(f"\n[bold]Results Summary[/bold]")
+        console.print(f"  Total operations: {len(results)}")
+        console.print(f"  Successful: [green]{success_count}[/green]")
+        if skipped_count > 0:
+            console.print(f"  Skipped (no changes): [yellow]{skipped_count}[/yellow]")
+        if failure_count > 0:
+            console.print(f"  Failed: [red]{failure_count}[/red]")
+        
+        # Show individual operation results
+        console.print(f"\n[bold]Operation Details[/bold]")
+        for result in results:
+            status_color = "green" if result.success else "red"
+            status_symbol = "✓" if result.success else "✗"
+            mode_indicator = " (dry run)" if result.dry_run else ""
+            
+            console.print(f"  [{status_color}]{status_symbol}[/{status_color}] {result.message}{mode_indicator}")
+        
+        # Show next steps for dry run
+        if ctx.dry_run and success_count > 0:
+            console.print(f"\n[yellow]ℹ[/yellow] This was a dry run. To apply changes, run:")
+            console.print(f"  dotfiles-sync --apply sync")
+        
+        # Exit with error code if any operations failed
+        if failure_count > 0:
+            sys.exit(1)
         
     except ConfigValidationError as e:
         console.print(f"[red]✗[/red] Configuration error: {e}")

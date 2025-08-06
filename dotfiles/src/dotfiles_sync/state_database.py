@@ -176,11 +176,12 @@ class StateDatabase:
         elif status in ('success', 'failed', 'rolled_back'):
             query_parts.append("completed_at = CURRENT_TIMESTAMP")
         
-        query_parts.append("WHERE id = ?")
         params.append(operation_id)
         
-        query = ", ".join(query_parts[1:])
-        self.conn.execute(f"{query_parts[0]}, {query}", params)
+        # Build the query with proper comma separation for SET clauses and WHERE
+        set_clauses = ", ".join(query_parts[1:])
+        full_query = f"{query_parts[0]}, {set_clauses} WHERE id = ?"
+        self.conn.execute(full_query, params)
     
     # ============================================================================
     # APPLIED CONFIGURATION TRACKING

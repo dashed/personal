@@ -1,0 +1,126 @@
+# Dockerfile.test - Multi-stage build for dotfiles testing using uv
+# This provides a safe, isolated environment for testing Phase 1 operations
+
+ARG BASE_IMAGE=ubuntu:24.04
+ARG VARIANT=default
+
+# Stage 1: Base OS with Python 3.12
+FROM ${BASE_IMAGE} as base
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-venv \
+    python3-pip \
+    git \
+    curl \
+    sudo \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Stage 2: Install uv and set up user
+FROM base as uv-base
+# Install uv directly
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# Create test user (don't run as root for safety)
+RUN useradd -m -s /bin/bash testuser && \
+    echo "testuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+USER testuser
+WORKDIR /home/testuser
+
+# Install uv for the test user
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/home/testuser/.local/bin:$PATH"
+
+# Stage 3: Copy repository and install dependencies
+FROM uv-base as deps
+# Set uv environment variables for optimal Docker performance
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
+ENV UV_PYTHON=python3
+
+# Copy project files
+COPY --chown=testuser:testuser pyproject.toml uv.lock* ./dotfiles/
+WORKDIR /home/testuser/dotfiles
+
+# Install dependencies using uv
+RUN uv sync --frozen --no-install-project
+
+# Copy the rest of the project
+COPY --chown=testuser:testuser . ./
+
+# Install the project itself
+RUN uv sync --frozen
+
+# Verify installation
+RUN uv run dotfiles-sync --version
+
+# Stage 4: Test Phase 1 operations
+FROM deps as test
+ARG VARIANT
+ENV DOTFILES_VARIANT=${VARIANT}
+ENV DOTFILES_TEST_MODE=true
+ENV PATH="/home/testuser/dotfiles/.venv/bin:$PATH"
+
+# Create test dotfiles in the repository
+RUN mkdir -p test-dotfiles && \
+    echo "# Test zshrc for ${VARIANT}" > test-dotfiles/test-zshrc && \
+    echo "# Test gitconfig" > test-dotfiles/test-gitconfig && \
+    echo "alias test-alias='echo testing'" > test-dotfiles/test-aliases
+
+# Create a minimal test configuration using printf
+RUN printf '[package]\nname = "test-dotfiles"\nversion = "1.0.0"\nauthor = "Test User <test@example.com>"\n\n[safety]\ndry_run_default = true\nbackup_before_modify = true\nbackup_retention_days = 7\n\n[security]\nwhitelist_paths = ["$HOME/**", "/tmp/**"]\n\n[[step]]\nop = "link"\nsrc = "test-dotfiles/test-zshrc"\ndst = "~/.test-zshrc"\nvariants = ["all"]\n\n[[step]]\nop = "copy"\nsrc = "test-dotfiles/test-gitconfig"\ndst = "~/.test-gitconfig"\nvariants = ["all"]\n\n[[step]]\nop = "link"\nsrc = "test-dotfiles/test-aliases"\ndst = "~/.test-aliases"\nvariants = ["default", "personal"]\n' > test-config.toml
+
+# Test dry run mode (should be safe)
+RUN echo "=== Testing dry run ===" && \
+    uv run dotfiles-sync --config test-config.toml sync && \
+    echo "Dry run completed successfully"
+
+# Test validation
+RUN echo "=== Testing validation ===" && \
+    uv run dotfiles-sync --config test-config.toml validate && \
+    echo "Validation completed successfully"
+
+# Verify no actual files were created (dry run)
+RUN echo "=== Verifying dry run safety ===" && \
+    ! test -f ~/.test-zshrc && \
+    ! test -f ~/.test-gitconfig && \
+    ! test -f ~/.test-aliases && \
+    echo "Dry run safety verified - no files created"
+
+# Test actual application (in isolated container)
+RUN echo "=== Testing actual application ===" && \
+    uv run dotfiles-sync --config test-config.toml --apply sync && \
+    echo "Application completed successfully"
+
+# Verify files were created
+RUN echo "=== Verifying file creation ===" && \
+    test -L ~/.test-zshrc && \
+    test -f ~/.test-gitconfig && \
+    test -L ~/.test-aliases && \
+    echo "File creation verified"
+
+# Verify symlink targets
+RUN echo "=== Verifying symlink targets ===" && \
+    test "$(readlink ~/.test-zshrc)" = "/home/testuser/dotfiles/test-dotfiles/test-zshrc" && \
+    test "$(readlink ~/.test-aliases)" = "/home/testuser/dotfiles/test-dotfiles/test-aliases" && \
+    echo "Symlink targets verified"
+
+# Test status command
+RUN echo "=== Testing status command ===" && \
+    uv run dotfiles-sync status && \
+    echo "Status command completed successfully"
+
+# Create test results
+RUN printf '{"phase": "Phase 1", "status": "SUCCESS", "tests": ["dry_run", "validation", "application", "file_creation", "symlink_verification", "status"], "timestamp": "%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /tmp/test-results.json
+
+# Final stage: Results and verification
+FROM test as final
+HEALTHCHECK --interval=5s --timeout=3s \
+    CMD test -f /tmp/test-results.json
+
+# Show results
+RUN echo "=== Phase 1 MVP Test Results ===" && \
+    cat /tmp/test-results.json
+
+ENTRYPOINT ["cat", "/tmp/test-results.json"]

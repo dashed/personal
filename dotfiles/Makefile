@@ -192,27 +192,40 @@ install-editable:
 uninstall:
 	uv pip uninstall dotfiles-sync
 
-# === Docker Testing (Placeholder for Phase 4) ===
+# === Docker Testing (Phase 1 MVP) ===
 
 # Build Docker test image
 docker-build:
-	@echo "Docker testing will be implemented in Phase 4"
-	# docker build -t dotfiles-test -f tests/docker/Dockerfile.test .
+	docker build -t dotfiles-phase1-test -f Dockerfile.test .
 
-# Run Docker tests
+# Run all Phase 1 Docker tests
+docker-test-all:
+	mkdir -p test-results
+	docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit
+	docker-compose -f docker-compose.test.yml down
+
+# Run single Phase 1 test (default variant)
 docker-test:
-	@echo "Docker testing will be implemented in Phase 4"
-	# docker-compose -f tests/docker/docker-compose.test.yml up --abort-on-container-exit
+	mkdir -p test-results
+	docker-compose -f docker-compose.test.yml up --build phase1-ubuntu-default
+	docker-compose -f docker-compose.test.yml down
 
-# Test on Ubuntu
+# Test specific variant
+docker-test-variant:
+	@read -p "Variant (default/personal/work): " variant; \
+	mkdir -p test-results; \
+	docker-compose -f docker-compose.test.yml up --build phase1-ubuntu-$$variant; \
+	docker-compose -f docker-compose.test.yml down
+
+# Test on Ubuntu (Phase 1)
 test-ubuntu:
-	@echo "Ubuntu testing will be implemented in Phase 4"
-	# docker run --rm -v $(PWD):/app dotfiles-test:ubuntu
+	docker-compose -f docker-compose.test.yml up --build phase1-ubuntu-default
 
-# Test on Alpine
-test-alpine:
-	@echo "Alpine testing will be implemented in Phase 4"
-	# docker run --rm -v $(PWD):/app dotfiles-test:alpine
+# Clean Docker test artifacts
+docker-clean:
+	docker-compose -f docker-compose.test.yml down -v
+	rm -rf test-results/
+	docker system prune -f
 
 # Test on Fedora
 test-fedora:

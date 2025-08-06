@@ -165,6 +165,12 @@ class StepConfig(BaseModel):
     mode: Optional[str] = Field(None, description="File permissions")
     exclude: Optional[List[str]] = Field(None, description="Patterns to exclude")
     sudo: bool = Field(False, description="Requires sudo")
+    
+    # File/Directory creation fields
+    create_parent_dirs: bool = Field(False, description="Auto-create parent directories")
+    parent_dir_mode: Optional[str] = Field(None, description="Parent directory permissions")
+    overwrite: bool = Field(False, description="Overwrite existing files")
+    backup: bool = Field(True, description="Create backup before overwrite")
     marker: Optional[str] = Field(None, description="Marker for append/prepend")
     
     @model_validator(mode="after")
@@ -326,7 +332,10 @@ class OperationResult(BaseModel):
     
     success: bool
     operation_id: int
+    operation_type: str
     message: str
+    dry_run: bool = False
+    skipped: bool = False
     rollback_data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
