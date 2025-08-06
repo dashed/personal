@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
     description TEXT
 );
 
-INSERT INTO schema_version (version, description) 
+INSERT OR IGNORE INTO schema_version (version, description) 
 VALUES (1, 'Initial schema creation');
 
 -- ============================================================================
@@ -48,10 +48,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     user TEXT NOT NULL,
     hostname TEXT NOT NULL,
     error_message TEXT,
-    metadata JSON,  -- Additional transaction context
-    
-    INDEX idx_transactions_status (status),
-    INDEX idx_transactions_started (started_at DESC)
+    metadata JSON  -- Additional transaction context
 );
 
 -- Individual operations within transactions
@@ -79,9 +76,7 @@ CREATE TABLE IF NOT EXISTS operations (
     rollback_data JSON,         -- Data needed for rollback
     
     FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
-    UNIQUE(transaction_id, sequence_num),
-    INDEX idx_operations_transaction (transaction_id),
-    INDEX idx_operations_status (status)
+    UNIQUE(transaction_id, sequence_num)
 );
 
 -- Currently applied configuration steps
@@ -98,9 +93,7 @@ CREATE TABLE IF NOT EXISTS applied_steps (
     last_verified_at TIMESTAMP,       -- For drift detection
     is_current BOOLEAN DEFAULT 1,     -- False if overridden by another step
     
-    FOREIGN KEY (applied_by_transaction) REFERENCES transactions(id),
-    INDEX idx_applied_dst (dst_path),
-    INDEX idx_applied_current (is_current)
+    FOREIGN KEY (applied_by_transaction) REFERENCES transactions(id)
 );
 
 -- Backup references
@@ -116,9 +109,7 @@ CREATE TABLE IF NOT EXISTS backups (
     expires_at TIMESTAMP,              -- For retention policy
     is_deleted BOOLEAN DEFAULT 0,
     
-    FOREIGN KEY (operation_id) REFERENCES operations(id) ON DELETE SET NULL,
-    INDEX idx_backups_expires (expires_at),
-    INDEX idx_backups_original (original_path)
+    FOREIGN KEY (operation_id) REFERENCES operations(id) ON DELETE SET NULL
 );
 
 -- Track one-time operations
@@ -133,8 +124,7 @@ CREATE TABLE IF NOT EXISTS run_once_tracking (
     exit_code INTEGER,
     output TEXT,
     
-    FOREIGN KEY (executed_by_transaction) REFERENCES transactions(id),
-    INDEX idx_run_once_hash (operation_hash)
+    FOREIGN KEY (executed_by_transaction) REFERENCES transactions(id)
 );
 
 -- Package installation tracking
@@ -149,8 +139,7 @@ CREATE TABLE IF NOT EXISTS installed_packages (
     metadata JSON,                     -- Package-specific metadata
     
     FOREIGN KEY (installed_by_transaction) REFERENCES transactions(id),
-    UNIQUE(package_manager, package_name),
-    INDEX idx_packages_manager (package_manager)
+    UNIQUE(package_manager, package_name)
 );
 
 -- Audit log (append-only)
@@ -167,10 +156,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     details JSON,                      -- Additional context
     
     FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE SET NULL,
-    FOREIGN KEY (operation_id) REFERENCES operations(id) ON DELETE SET NULL,
-    INDEX idx_audit_timestamp (timestamp DESC),
-    INDEX idx_audit_severity (severity),
-    INDEX idx_audit_event (event_type)
+    FOREIGN KEY (operation_id) REFERENCES operations(id) ON DELETE SET NULL
 );
 
 -- Drift detection results
@@ -183,8 +169,7 @@ CREATE TABLE IF NOT EXISTS drift_detection (
     drift_type TEXT CHECK(drift_type IN ('modified', 'deleted', 'permissions', 'ownership')),
     details JSON,
     
-    FOREIGN KEY (applied_step_id) REFERENCES applied_steps(id) ON DELETE CASCADE,
-    INDEX idx_drift_checked (checked_at DESC)
+    FOREIGN KEY (applied_step_id) REFERENCES applied_steps(id) ON DELETE CASCADE
 );
 
 -- ============================================================================
@@ -334,10 +319,39 @@ END;
 -- INDEXES FOR PERFORMANCE
 -- ============================================================================
 
+-- Transaction indexes
+CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+CREATE INDEX IF NOT EXISTS idx_transactions_started ON transactions(started_at DESC);
+
+-- Operation indexes
+CREATE INDEX IF NOT EXISTS idx_operations_transaction ON operations(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_operations_status ON operations(status);
 CREATE INDEX IF NOT EXISTS idx_operations_dst_path ON operations(dst_path);
-CREATE INDEX IF NOT EXISTS idx_audit_transaction ON audit_log(transaction_id);
-CREATE INDEX IF NOT EXISTS idx_backups_not_deleted ON backups(is_deleted, expires_at);
+
+-- Applied steps indexes
+CREATE INDEX IF NOT EXISTS idx_applied_dst ON applied_steps(dst_path);
+CREATE INDEX IF NOT EXISTS idx_applied_current ON applied_steps(is_current);
 CREATE INDEX IF NOT EXISTS idx_applied_checksum ON applied_steps(checksum);
+
+-- Backup indexes
+CREATE INDEX IF NOT EXISTS idx_backups_expires ON backups(expires_at);
+CREATE INDEX IF NOT EXISTS idx_backups_original ON backups(original_path);
+CREATE INDEX IF NOT EXISTS idx_backups_not_deleted ON backups(is_deleted, expires_at);
+
+-- Run once tracking index
+CREATE INDEX IF NOT EXISTS idx_run_once_hash ON run_once_tracking(operation_hash);
+
+-- Package manager index
+CREATE INDEX IF NOT EXISTS idx_packages_manager ON installed_packages(package_manager);
+
+-- Audit log indexes
+CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_severity ON audit_log(severity);
+CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_log(event_type);
+CREATE INDEX IF NOT EXISTS idx_audit_transaction ON audit_log(transaction_id);
+
+-- Drift detection index
+CREATE INDEX IF NOT EXISTS idx_drift_checked ON drift_detection(checked_at DESC);
 
 -- ============================================================================
 -- INITIAL DATA

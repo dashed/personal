@@ -13,30 +13,11 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Any, Tuple
 from contextlib import contextmanager
-from dataclasses import dataclass, asdict
 import logging
 
+from dotfiles_sync.models import TransactionContext, OperationResult
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class TransactionContext:
-    """Context for a dotfiles transaction"""
-    id: str
-    variant: str
-    user: str
-    hostname: str
-    dry_run: bool = False
-    metadata: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class OperationResult:
-    """Result of a single operation"""
-    success: bool
-    operation_id: int
-    message: str
-    rollback_data: Optional[Dict[str, Any]] = None
 
 
 class StateDatabase:
@@ -112,15 +93,22 @@ class StateDatabase:
                 db.record_operation(tx, 'link', {...})
         """
         tx_id = str(uuid.uuid4())
-        tx = TransactionContext(tx_id, variant, user, hostname, dry_run, metadata)
+        tx = TransactionContext(
+            id=tx_id,
+            variant=variant,
+            user=user,
+            hostname=hostname,
+            dry_run=dry_run,
+            metadata=metadata
+        )
         
         try:
             # Start transaction
             self.conn.execute("""
                 INSERT INTO transactions (id, variant, user, hostname, dry_run, metadata, status)
                 VALUES (?, ?, ?, ?, ?, ?, 'in_progress')
-            """, (tx_id, variant, user, hostname, dry_run, 
-                  json.dumps(metadata) if metadata else None))
+            """, (tx.id, tx.variant, tx.user, tx.hostname, tx.dry_run, 
+                  json.dumps(tx.metadata) if tx.metadata else None))
             
             yield tx
             
@@ -129,7 +117,7 @@ class StateDatabase:
                 UPDATE transactions 
                 SET status = 'completed', completed_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            """, (tx_id,))
+            """, (tx.id,))
             
         except Exception as e:
             # Mark as failed and potentially trigger rollback
@@ -139,7 +127,7 @@ class StateDatabase:
                     error_message = ?,
                     completed_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            """, (str(e), tx_id))
+            """, (str(e), tx.id))
             raise
     
     def record_operation(self, tx: TransactionContext, operation_type: str,
