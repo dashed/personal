@@ -5,9 +5,8 @@ This module implements the 'link' operation which creates symbolic links
 from destination paths to source files in the dotfiles repository.
 """
 
-import os
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 from dotfiles_sync.models import StepConfig, OperationResult
 from dotfiles_sync.context import OperationContext

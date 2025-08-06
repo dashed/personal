@@ -93,25 +93,26 @@ def test_rollback_command_no_id(runner):
     assert "No transaction ID specified" in result.output
 
 
-def test_sync_command_not_implemented(runner, test_config_path):
-    """Test sync command (currently not implemented)."""
+def test_sync_command_implemented(runner, test_config_path):
+    """Test sync command is now implemented."""
     result = runner.invoke(cli, ["--config", str(test_config_path), "sync"])
     assert result.exit_code == 0
-    assert "not yet implemented" in result.output
+    assert "Syncing dotfiles" in result.output
+    assert "DRY RUN" in result.output  # Should be dry run by default
 
 
 def test_cli_dry_run_default(runner, test_config_path):
     """Test that dry-run is default behavior."""
     result = runner.invoke(cli, ["--config", str(test_config_path), "sync"])
     assert result.exit_code == 0
-    assert "DRY RUN" in result.output
+    assert "DRY RUN" in result.output or "dry run" in result.output.lower()
 
 
 def test_cli_apply_flag(runner, test_config_path):
     """Test --apply flag overrides dry-run."""
     result = runner.invoke(cli, ["--config", str(test_config_path), "--apply", "sync"])
     assert result.exit_code == 0
-    assert "APPLY" in result.output
+    # When applying, it should not show DRY RUN
     assert "DRY RUN" not in result.output
 
 

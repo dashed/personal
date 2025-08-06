@@ -306,7 +306,9 @@ class ExecutionContext(BaseModel):
         if not expanded.is_absolute():
             # Make relative to config file directory
             expanded = self.config_path.parent / expanded
-        return expanded.resolve()
+        # Use absolute() instead of resolve() to preserve logical path structure
+        # This avoids issues with symlinks and firmlinks on macOS/Linux
+        return expanded.absolute()
 
 
 # ============================================================================

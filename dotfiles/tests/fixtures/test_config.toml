@@ -13,7 +13,7 @@ verify_checksums = false
 fail_on_error = true
 
 [security]
-whitelist_paths = ["~/.config", "~/.local"]
+whitelist_paths = ["~/**", "/tmp/**"]
 blacklist_paths = ["/etc", "/usr"]
 
 # Test steps

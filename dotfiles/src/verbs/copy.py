@@ -8,8 +8,7 @@ from the dotfiles repository to destination paths.
 import shutil
 import os
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-import filecmp
+from typing import List, Dict, Any
 
 from dotfiles_sync.models import StepConfig, OperationResult
 from dotfiles_sync.context import OperationContext
@@ -53,7 +52,6 @@ class CopyVerb(Verb):
             return errors
         
         # Additional copy-specific validation
-        src_path = ctx.get_src_path()
         dst_path = ctx.get_dst_path()
         
         # Check if parent directory exists or can be created

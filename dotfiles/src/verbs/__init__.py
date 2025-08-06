@@ -3,14 +3,29 @@ Verb registry and operation executor.
 
 This module provides the registry for all available verbs and the executor
 that runs operations with transaction support and rollback capabilities.
+
+Enhanced with Phase 2 safety features including:
+- Pre-flight validation
+- Automatic backup creation
+- Enhanced transaction management
+- Safety checks and validation
 """
 
+from pathlib import Path
 from typing import Dict, List, Optional, Type
 import logging
 
-from dotfiles_sync.models import DotfilesConfig, StepConfig, OperationType, OperationResult
+from dotfiles_sync.models import DotfilesConfig, StepConfig, OperationResult
 from dotfiles_sync.context import ExecutionContext, OperationContext
 from dotfiles_sync.state_database import StateDatabase
+
+# Import safety components - always required
+from safety import (
+    BackupManager, 
+    SafetyValidator,
+    TransactionManager,
+    ValidationError
+)
 
 from .base import Verb
 from .link import LinkVerb
@@ -68,27 +83,51 @@ class VerbRegistry:
         return list(self._verbs.keys())
 
 
-class OperationExecutor:
+class EnhancedOperationExecutor:
     """
-    Executes operations with transaction support and rollback capabilities.
+    Enhanced operation executor with comprehensive safety features.
     
     This class handles the execution of operations defined in the configuration,
-    with proper error handling, rollback support, and state tracking.
+    with proper error handling, rollback support, state tracking, and Phase 2
+    safety features including pre-flight validation, automatic backups, and
+    enhanced transaction management.
     """
     
-    def __init__(self, verb_registry: Optional[VerbRegistry] = None):
+    def __init__(
+        self, 
+        verb_registry: Optional[VerbRegistry] = None,
+        backup_manager: Optional[BackupManager] = None,
+        safety_validator: Optional[SafetyValidator] = None,
+        transaction_manager: Optional[TransactionManager] = None
+    ):
         """
-        Initialize the operation executor.
+        Initialize the enhanced operation executor.
         
         Args:
             verb_registry: Optional verb registry (creates default if None)
+            backup_manager: Optional backup manager for safety features
+            safety_validator: Optional safety validator for pre-flight checks
+            transaction_manager: Optional enhanced transaction manager
         """
         self.registry = verb_registry or VerbRegistry()
+        # Initialize safety components - always available
+        self.backup_manager = backup_manager or BackupManager()
+        self.safety_validator = safety_validator or SafetyValidator()
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize database (will be managed by transaction manager)
+        self.database = StateDatabase()
+        
+        # Initialize transaction manager with integrated components
+        self.transaction_manager = transaction_manager or TransactionManager(
+            database=self.database,
+            backup_manager=self.backup_manager,
+            safety_validator=self.safety_validator
+        )
     
     def execute_all(self, config: DotfilesConfig, exec_ctx: ExecutionContext) -> List[OperationResult]:
         """
-        Execute all applicable operations from the configuration.
+        Execute all applicable operations from the configuration with enhanced safety.
         
         Args:
             config: The loaded dotfiles configuration
@@ -108,35 +147,127 @@ class OperationExecutor:
         
         self.logger.info(f"Found {len(applicable_steps)} applicable operations")
         
-        # Execute with transaction support
-        with StateDatabase() as db:
-            with db.transaction(
+        # Always use enhanced safety features (Phase 2)
+        return self._execute_with_enhanced_safety(config, exec_ctx, applicable_steps)
+    
+    def _execute_with_enhanced_safety(self, config: DotfilesConfig, exec_ctx: ExecutionContext, applicable_steps: List[StepConfig]) -> List[OperationResult]:
+        """Execute operations with full Phase 2 safety features."""
+        results = []
+        
+        # Ensure config is available in ExecutionContext for safety validation
+        exec_ctx.config = config
+        
+        # Update safety validator with actual config from loaded configuration
+        self.safety_validator = SafetyValidator(config.security, config.safety)
+        self.transaction_manager.safety_validator = self.safety_validator
+        
+        # Enhanced transaction management with safety features
+        try:
+            with self.transaction_manager.transaction_scope(
                 variant=exec_ctx.variant,
                 user=exec_ctx.system_info.username,
                 hostname=exec_ctx.system_info.hostname,
-                dry_run=exec_ctx.dry_run
-            ) as tx:
+                dry_run=exec_ctx.dry_run,
+                execution_context=exec_ctx
+            ) as transaction_id:
                 
+                # Collect files that will be modified for backup
+                if config.safety.backup_before_modify and not exec_ctx.dry_run:
+                    files_to_backup = self._collect_files_for_backup(applicable_steps, exec_ctx)
+                    if files_to_backup:
+                        backup_id = self.transaction_manager.create_backup_for_transaction(
+                            transaction_id=transaction_id,
+                            files_to_backup=files_to_backup,
+                            reason="Pre-execution backup"
+                        )
+                        if backup_id:
+                            self.logger.info(f"Created backup: {backup_id}")
+                
+                # Execute operations
                 for i, step in enumerate(applicable_steps):
-                    result = self._execute_step(step, exec_ctx, db, tx, i + 1)
+                    result = self._execute_step_enhanced(step, exec_ctx, transaction_id, i + 1)
                     results.append(result)
+                    
+                    # Record operation in enhanced transaction
+                    rollback_action = self._create_rollback_action(step, exec_ctx, result)
+                    self.transaction_manager.record_operation(
+                        transaction_id=transaction_id,
+                        operation_result=result,
+                        rollback_action=rollback_action
+                    )
                     
                     # Stop on failure unless forced
                     if not result.success and not exec_ctx.force:
                         self.logger.error(f"Operation failed, stopping execution: {result.message}")
                         break
         
+        except ValidationError as e:
+            # Handle validation errors
+            self.logger.error(f"Pre-flight validation failed: {e}")
+            failed_validations = [str(vr.message) for vr in e.validation_results]
+            results.append(OperationResult(
+                success=False,
+                operation_id=0,
+                operation_type="validation",
+                message=f"Validation failed: {'; '.join(failed_validations)}",
+                dry_run=exec_ctx.dry_run,
+                error=str(e)
+            ))
+        
+        except Exception as e:
+            # Handle other errors
+            self.logger.error(f"Execution failed: {e}", exc_info=True)
+            results.append(OperationResult(
+                success=False,
+                operation_id=0,
+                operation_type="execution",
+                message=f"Execution failed: {e}",
+                dry_run=exec_ctx.dry_run,
+                error=str(e)
+            ))
+        
         return results
     
-    def _execute_step(self, step: StepConfig, exec_ctx: ExecutionContext, 
-                     db: StateDatabase, transaction, sequence_num: int) -> OperationResult:
+    def _add_operation_id_to_result(self, result: OperationResult, operation_id: int) -> OperationResult:
+        """Add operation_id to a result, creating a new instance since results are frozen."""
+        # Use model_copy to create a new instance with updated field
+        return result.model_copy(update={'operation_id': operation_id})
+    
+    def _collect_files_for_backup(self, steps: List[StepConfig], exec_ctx: ExecutionContext) -> List[Path]:
         """
-        Execute a single step operation.
+        Collect all files that will be modified by the given steps.
+        
+        Args:
+            steps: List of steps to analyze
+            exec_ctx: Execution context
+            
+        Returns:
+            List of file paths that need backup
+        """
+        files_to_backup = []
+        
+        for step in steps:
+            if step.dst and step.op.value in ['link', 'copy', 'syncdir', 'template']:
+                dst_path = exec_ctx.expand_path(step.dst)
+                if dst_path.exists():
+                    files_to_backup.append(dst_path)
+        
+        return files_to_backup
+    
+    def _execute_step_enhanced(
+        self, 
+        step: StepConfig, 
+        exec_ctx: ExecutionContext, 
+        transaction_id: str,
+        sequence_num: int
+    ) -> OperationResult:
+        """
+        Execute a single step with enhanced safety features.
         
         Args:
             step: Step configuration
             exec_ctx: Execution context
-            transaction: Database transaction
+            transaction_id: Enhanced transaction ID
             sequence_num: Sequence number in the transaction
             
         Returns:
@@ -149,7 +280,7 @@ class OperationExecutor:
             self.logger.error(error)
             return OperationResult(
                 success=False,
-                operation_id=0,  # Use 0 for unknown operations
+                operation_id=0,
                 operation_type=step.op.value,
                 message=error,
                 dry_run=exec_ctx.dry_run
@@ -163,134 +294,129 @@ class OperationExecutor:
             sequence_num=sequence_num
         )
         
-        # Record operation start in database
-        operation_id = db.record_operation(
-            tx=transaction,
+        # Perform safety validation for this specific operation
+        validation_results = self.safety_validator.validate_operation(
             operation_type=step.op.value,
-            config=step.model_dump(),
-            src_path=str(op_ctx.get_src_path()) if op_ctx.get_src_path() else None,
-            dst_path=str(op_ctx.get_dst_path()) if op_ctx.get_dst_path() else None
+            src_path=op_ctx.get_src_path(),
+            dst_path=op_ctx.get_dst_path(),
+            command=step.command,
+            expected_checksum=step.checksum
         )
         
-        # Update operation context with the operation_id
-        op_ctx.operation_id = operation_id
+        # Check for validation failures
+        failed_validations = [vr for vr in validation_results if not vr.valid]
+        if failed_validations:
+            error_messages = [vr.message for vr in failed_validations]
+            return OperationResult(
+                success=False,
+                operation_id=0,
+                operation_type=step.op.value,
+                message=f"Validation failed: {'; '.join(error_messages)}",
+                dry_run=exec_ctx.dry_run,
+                error="Validation failure"
+            )
         
         try:
-            # Update operation status
-            db.update_operation_status(operation_id, 'executing')
-            
             # Execute the operation (dry run or apply)
             if exec_ctx.dry_run:
                 result = verb.dry_run(step, op_ctx)
             else:
                 result = verb.apply(step, op_ctx)
             
-            # Add operation_id to the result (verbs don't know about it)
-            result = self._add_operation_id_to_result(result, operation_id)
-            
-            # Update operation status based on result
-            if result.success:
-                db.update_operation_status(
-                    operation_id, 'success',
-                    rollback_data=result.rollback_data
-                )
-                
-                # Record applied step if not a dry run
-                if not exec_ctx.dry_run:
-                    db.record_applied_step(
-                        tx=transaction,
-                        operation_type=step.op.value,
-                        config=step.model_dump(),
-                        src_path=str(op_ctx.get_src_path()) if op_ctx.get_src_path() else None,
-                        dst_path=str(op_ctx.get_dst_path()) if op_ctx.get_dst_path() else None
-                    )
-            else:
-                db.update_operation_status(
-                    operation_id, 'failed',
-                    error_message=result.message
-                )
+            # Add transaction context to result
+            if result.rollback_data is None:
+                result = result.model_copy(update={'rollback_data': {'transaction_id': transaction_id}})
             
             return result
             
         except Exception as e:
-            # Update operation status on exception
-            db.update_operation_status(
-                operation_id, 'failed',
-                error_message=str(e)
-            )
-            
             error = f"Exception executing {step.op}: {e}"
             self.logger.error(error, exc_info=True)
             return OperationResult(
                 success=False,
-                operation_id=operation_id,
+                operation_id=0,
                 operation_type=step.op.value,
                 message=error,
                 dry_run=exec_ctx.dry_run,
                 error=str(e)
             )
     
-    def _add_operation_id_to_result(self, result: OperationResult, operation_id: int) -> OperationResult:
-        """Add operation_id to a result, creating a new instance since results are frozen."""
-        # Create a new result with the same data plus operation_id
-        result_dict = result.model_dump()
-        result_dict['operation_id'] = operation_id
-        return OperationResult(**result_dict)
-    
-    def rollback_transaction(self, transaction_id: str) -> bool:
+    def _create_rollback_action(
+        self, 
+        step: StepConfig, 
+        exec_ctx: ExecutionContext, 
+        result: OperationResult
+    ) -> Optional[Dict]:
         """
-        Rollback a specific transaction.
+        Create rollback action for a step result.
         
         Args:
-            transaction_id: ID of the transaction to rollback
-            
-        Returns:
-            True if rollback succeeded
-        """
-        with StateDatabase() as db:
-            return db.perform_rollback(transaction_id)
-    
-    def _filter_applicable_steps(self, steps: List[StepConfig], 
-                                exec_ctx: ExecutionContext) -> List[StepConfig]:
-        """
-        Filter steps that are applicable for the current context.
-        
-        Args:
-            steps: All steps from configuration
+            step: Step configuration
             exec_ctx: Execution context
+            result: Operation result
             
         Returns:
-            List of applicable steps
+            Rollback action dictionary or None
         """
-        applicable = []
+        if not result.success or exec_ctx.dry_run:
+            return None
+        
+        op_ctx = OperationContext(
+            execution_context=exec_ctx,
+            operation_type=step.op.value,
+            step_config=step,
+            sequence_num=1  # Not used for rollback
+        )
+        
+        if step.op.value == 'link' and step.dst:
+            dst_path = op_ctx.get_dst_path()
+            return {
+                "type": "remove_file",
+                "file_path": str(dst_path),
+                "operation_type": "link"
+            }
+        
+        elif step.op.value == 'copy' and step.dst:
+            dst_path = op_ctx.get_dst_path()
+            return {
+                "type": "remove_file", 
+                "file_path": str(dst_path),
+                "operation_type": "copy"
+            }
+        
+        # Add more rollback actions as needed for other operation types
+        return None
+    
+    def _filter_applicable_steps(self, steps: List[StepConfig], exec_ctx: ExecutionContext) -> List[StepConfig]:
+        """
+        Filter steps by platform and variant.
+        
+        Args:
+            steps: All configured steps
+            exec_ctx: Execution context with variant and system info
+            
+        Returns:
+            List of steps applicable to current context
+        """
+        applicable_steps = []
         
         for step in steps:
-            # Check platform requirements
+            # Check variant filter
+            if exec_ctx.variant not in step.variants and "all" not in step.variants:
+                continue
+            
+            # Check platform filter
             if step.platforms:
-                platform_match = any(
-                    platform.value == exec_ctx.system_info.platform.value or platform.value == "all"
-                    for platform in step.platforms
-                )
-                if not platform_match:
-                    self.logger.debug(f"Skipping step (platform): {step.op} {step.src} -> {step.dst}")
+                if not exec_ctx.system_info.matches_platform(step.platforms):
                     continue
             
-            # Check variant requirements
-            if step.variants:
-                variant_match = any(
-                    variant == exec_ctx.variant or variant == "all"
-                    for variant in step.variants
-                )
-                if not variant_match:
-                    self.logger.debug(f"Skipping step (variant): {step.op} {step.src} -> {step.dst}")
-                    continue
-            
-            applicable.append(step)
+            applicable_steps.append(step)
         
-        # Sort by priority (higher numbers first) - use 0 if no priority field
-        applicable.sort(key=lambda s: getattr(s, 'priority', 0), reverse=True)
-        
-        return applicable
+        return applicable_steps
+
+
+# Use EnhancedOperationExecutor as the primary executor
+OperationExecutor = EnhancedOperationExecutor
 
 
 # Global registry instance

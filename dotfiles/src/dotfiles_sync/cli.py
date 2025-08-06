@@ -17,7 +17,6 @@ from dotfiles_sync import __version__
 from dotfiles_sync.config import ConfigLoader, ConfigValidationError
 from dotfiles_sync.context import ExecutionContext
 from dotfiles_sync.database import StateDatabase
-import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from verbs import OperationExecutor
 
@@ -240,7 +239,7 @@ def sync(ctx: ExecutionContext) -> None:
         failure_count = len(results) - success_count
         skipped_count = sum(1 for r in results if r.success and getattr(r, 'skipped', False))
         
-        console.print(f"\n[bold]Results Summary[/bold]")
+        console.print("\n[bold]Results Summary[/bold]")
         console.print(f"  Total operations: {len(results)}")
         console.print(f"  Successful: [green]{success_count}[/green]")
         if skipped_count > 0:
@@ -249,7 +248,7 @@ def sync(ctx: ExecutionContext) -> None:
             console.print(f"  Failed: [red]{failure_count}[/red]")
         
         # Show individual operation results
-        console.print(f"\n[bold]Operation Details[/bold]")
+        console.print("\n[bold]Operation Details[/bold]")
         for result in results:
             status_color = "green" if result.success else "red"
             status_symbol = "✓" if result.success else "✗"
@@ -259,8 +258,8 @@ def sync(ctx: ExecutionContext) -> None:
         
         # Show next steps for dry run
         if ctx.dry_run and success_count > 0:
-            console.print(f"\n[yellow]ℹ[/yellow] This was a dry run. To apply changes, run:")
-            console.print(f"  dotfiles-sync --apply sync")
+            console.print("\n[yellow]ℹ[/yellow] This was a dry run. To apply changes, run:")
+            console.print("  dotfiles-sync --apply sync")
         
         # Exit with error code if any operations failed
         if failure_count > 0:

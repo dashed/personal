@@ -8,15 +8,14 @@ application, and rollback.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any
 import logging
 import hashlib
 import shutil
 from datetime import datetime
 
-from dotfiles_sync.context import ExecutionContext, OperationContext
+from dotfiles_sync.context import OperationContext
 from dotfiles_sync.models import StepConfig, OperationResult
-from dotfiles_sync.state_database import StateDatabase
 
 logger = logging.getLogger(__name__)
 

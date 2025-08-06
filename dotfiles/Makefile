@@ -33,10 +33,11 @@ help:
 	@echo "  make build        Build distribution packages"
 	@echo "  make check        Run all checks (lint, typecheck, test)"
 	@echo ""
-	@echo "Docker Testing (Phase 4):"
-	@echo "  make docker-test  Run Docker integration tests"
-	@echo "  make test-ubuntu  Test on Ubuntu container"
-	@echo "  make test-alpine  Test on Alpine container"
+	@echo "Docker Integration Testing:"
+	@echo "  make docker-test     Run comprehensive integration tests"
+	@echo "  make docker-test-all Run tests on all platforms"
+	@echo "  make test-ubuntu     Test on Ubuntu container"
+	@echo "  make docker-clean    Clean up Docker resources"
 
 # Install production dependencies
 install:
@@ -226,6 +227,7 @@ docker-clean:
 	docker-compose -f docker-compose.test.yml down -v
 	rm -rf test-results/
 	docker system prune -f
+
 
 # Test on Fedora
 test-fedora:
