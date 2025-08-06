@@ -284,9 +284,17 @@ dotfiles/
 │   └── checksums/          # individual checksum files
 │       └── macos_defaults.sh.sha256
 │
-└── tests/                   # test your dotfiles!
-    ├── test_links.py
-    └── test_safety.py
+├── tests/                   # test your dotfiles!
+│   ├── test_links.py
+│   ├── test_safety.py
+│   └── integration/        # Docker-based integration tests
+│       ├── test_dotfiles.py
+│       └── test_coverage.py
+│
+├── Dockerfile.test          # Multi-stage Docker build for testing
+├── docker-compose.test.yml  # Test matrix orchestration
+├── .dockerignore           # Exclude secrets from Docker build
+└── Makefile                # Convenient test commands
 ```
 
 ---
@@ -716,7 +724,394 @@ def test_checksums_present():
 
 ---
 
-## 9 Migration Guide
+## 9 Docker-Based Integration Testing
+
+### 9.1 Overview
+
+Docker provides isolated, reproducible environments for testing dotfiles without risking host systems. This ensures your configuration works across different OS distributions, variants, and scenarios.
+
+**Key Benefits:**
+- **Complete isolation** - No risk to host system
+- **Reproducible** - Same environment every time
+- **Parallel testing** - Multiple scenarios simultaneously  
+- **CI/CD ready** - Automated testing on every commit
+- **Cross-platform** - Test Ubuntu, Alpine, Fedora, Arch, etc.
+
+### 9.2 Dockerfile for Testing
+
+```dockerfile
+# Dockerfile.test - Multi-stage build for dotfiles testing
+ARG BASE_IMAGE=ubuntu:22.04
+ARG PYTHON_VERSION=3.12
+ARG VARIANT=personal
+
+# Stage 1: Base OS with Python
+FROM ${BASE_IMAGE} as base
+RUN apt-get update && apt-get install -y \
+    python${PYTHON_VERSION} \
+    python3-pip \
+    git \
+    curl \
+    sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Stage 2: Create test user (don't run as root)
+FROM base as user
+RUN useradd -m -s /bin/bash testuser && \
+    echo "testuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+USER testuser
+WORKDIR /home/testuser
+
+# Stage 3: Copy dotfiles repository
+FROM user as repo
+COPY --chown=testuser:testuser . /home/testuser/dotfiles/
+WORKDIR /home/testuser/dotfiles
+
+# Stage 4: Bootstrap
+FROM repo as bootstrap
+ARG VARIANT
+ENV DOTFILES_VARIANT=${VARIANT}
+ENV DOTFILES_TEST_MODE=true
+RUN ./bootstrap.sh --dry-run && \
+    ./bootstrap.sh --apply
+
+# Stage 5: Test verification
+FROM bootstrap as test
+COPY tests/integration/ /home/testuser/tests/
+RUN python -m pytest /home/testuser/tests/ \
+    --json-report --json-report-file=/tmp/test-results.json
+
+# Final stage: Results
+FROM test as final
+HEALTHCHECK --interval=5s --timeout=3s \
+    CMD test -f /tmp/test-results.json
+ENTRYPOINT ["cat", "/tmp/test-results.json"]
+```
+
+### 9.3 Docker Compose for Test Matrix
+
+```yaml
+# docker-compose.test.yml
+version: '3.8'
+
+services:
+  # Ubuntu with personal variant
+  ubuntu-personal:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      args:
+        BASE_IMAGE: ubuntu:22.04
+        VARIANT: personal
+    volumes:
+      - ./test-results:/tmp/results
+      - ./dotfiles:/home/testuser/dotfiles:ro
+    environment:
+      - TEST_NAME=ubuntu-personal
+    networks:
+      - test-network
+
+  # Ubuntu with work variant
+  ubuntu-work:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      args:
+        BASE_IMAGE: ubuntu:22.04
+        VARIANT: work
+    volumes:
+      - ./test-results:/tmp/results
+      - ./dotfiles:/home/testuser/dotfiles:ro
+    environment:
+      - TEST_NAME=ubuntu-work
+    networks:
+      - test-network
+
+  # Alpine Linux (minimal)
+  alpine-personal:
+    build:
+      context: .
+      dockerfile: Dockerfile.test.alpine
+      args:
+        BASE_IMAGE: alpine:3.18
+        VARIANT: personal
+    volumes:
+      - ./test-results:/tmp/results
+    environment:
+      - TEST_NAME=alpine-personal
+    networks:
+      - test-network
+
+  # Fedora
+  fedora-personal:
+    build:
+      context: .
+      dockerfile: Dockerfile.test.fedora
+      args:
+        BASE_IMAGE: fedora:39
+        VARIANT: personal
+    volumes:
+      - ./test-results:/tmp/results
+    environment:
+      - TEST_NAME=fedora-personal
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge
+```
+
+### 9.4 Integration Test Suite
+
+```python
+# tests/integration/test_dotfiles.py
+import os
+import subprocess
+from pathlib import Path
+import json
+import pytest
+
+class TestDotfilesIntegration:
+    """Integration tests for dotfiles installation"""
+    
+    def test_symlinks_created(self):
+        """Verify all expected symlinks exist"""
+        expected_links = {
+            "~/.zshrc": "dotfiles/zsh/zshrc",
+            "~/.gitconfig": "dotfiles/git/gitconfig",
+        }
+        for link, target in expected_links.items():
+            link_path = Path(link).expanduser()
+            assert link_path.is_symlink(), f"{link} is not a symlink"
+            assert link_path.resolve().exists(), f"{link} target doesn't exist"
+    
+    def test_backup_created(self):
+        """Verify backups are created before modifications"""
+        backup_dir = Path("~/.local/state/dotfiles/backups").expanduser()
+        assert backup_dir.exists(), "Backup directory doesn't exist"
+        assert any(backup_dir.iterdir()), "No backups found"
+    
+    def test_state_database(self):
+        """Verify state database is initialized"""
+        state_db = Path("~/.local/state/dotfiles/state.db").expanduser()
+        assert state_db.exists(), "State database not found"
+        assert state_db.stat().st_size > 0, "State database is empty"
+    
+    def test_dry_run_default(self):
+        """Verify dry-run is default behavior"""
+        result = subprocess.run(
+            ["python", "-m", "dotfiles_sync"],
+            capture_output=True,
+            text=True
+        )
+        assert "dry run" in result.stdout.lower()
+        assert result.returncode == 0
+    
+    def test_rollback_capability(self):
+        """Test rollback after simulated failure"""
+        # Create a change
+        subprocess.run(["python", "-m", "dotfiles_sync", "--apply"])
+        
+        # Get current state
+        original = Path("~/.zshrc").expanduser().readlink()
+        
+        # Simulate failure and rollback
+        subprocess.run(["python", "-m", "dotfiles_sync", "--rollback-last"])
+        
+        # Verify rollback worked
+        current = Path("~/.zshrc").expanduser().readlink()
+        assert original == current, "Rollback failed"
+    
+    @pytest.mark.parametrize("package_manager", ["brew", "apt"])
+    def test_package_installation(self, package_manager):
+        """Verify package managers work correctly"""
+        if package_manager == "brew" and not Path("/usr/local/bin/brew").exists():
+            pytest.skip("Homebrew not available")
+        if package_manager == "apt" and not Path("/usr/bin/apt").exists():
+            pytest.skip("APT not available")
+        
+        # Run installation
+        result = subprocess.run(
+            ["python", "-m", "dotfiles_sync", "--apply", "--only", package_manager],
+            capture_output=True
+        )
+        assert result.returncode == 0
+    
+    def test_idempotency(self):
+        """Verify running twice doesn't break"""
+        # Run twice
+        first = subprocess.run(["python", "-m", "dotfiles_sync", "--apply"])
+        second = subprocess.run(["python", "-m", "dotfiles_sync", "--apply"])
+        
+        assert first.returncode == 0
+        assert second.returncode == 0
+        
+        # Second run should make no changes
+        assert "No changes needed" in second.stdout
+```
+
+### 9.5 Test Scenarios
+
+```makefile
+# Makefile for Docker testing
+.PHONY: test test-all test-ubuntu test-alpine clean-tests
+
+# Run all tests
+test-all:
+	docker-compose -f docker-compose.test.yml up --build
+	docker-compose -f docker-compose.test.yml down
+
+# Test specific OS
+test-ubuntu:
+	docker-compose -f docker-compose.test.yml up ubuntu-personal ubuntu-work
+	docker-compose -f docker-compose.test.yml down
+
+test-alpine:
+	docker-compose -f docker-compose.test.yml up alpine-personal
+	docker-compose -f docker-compose.test.yml down
+
+# Quick test (cached build)
+test-quick:
+	docker-compose -f docker-compose.test.yml up --no-build ubuntu-personal
+
+# Interactive debugging
+debug-ubuntu:
+	docker-compose -f docker-compose.test.yml run --rm ubuntu-personal /bin/bash
+
+# Clean up
+clean-tests:
+	docker-compose -f docker-compose.test.yml down -v
+	rm -rf test-results/
+	docker system prune -f
+```
+
+### 9.6 CI/CD Integration
+
+```yaml
+# .github/workflows/test.yml
+name: Integration Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu, alpine, fedora]
+        variant: [personal, work]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Run integration tests
+      run: |
+        docker build \
+          --build-arg BASE_IMAGE=${{ matrix.os }}:latest \
+          --build-arg VARIANT=${{ matrix.variant }} \
+          --target test \
+          -t dotfiles-test:${{ matrix.os }}-${{ matrix.variant }} \
+          -f Dockerfile.test .
+    
+    - name: Extract test results
+      if: always()
+      run: |
+        docker run --rm \
+          dotfiles-test:${{ matrix.os }}-${{ matrix.variant }} \
+          > test-results-${{ matrix.os }}-${{ matrix.variant }}.json
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: test-results-*.json
+```
+
+### 9.7 Security Considerations
+
+**Docker Testing Security:**
+1. **Never mount real home directory** - Use test user instead
+2. **Use .dockerignore** to exclude secrets:
+   ```
+   # .dockerignore
+   .env
+   **/secrets/
+   **/*.key
+   **/*.pem
+   ~/.ssh/
+   ```
+3. **Test credentials only** - Use mock secrets for testing
+4. **Read-only mounts** where possible
+5. **Network isolation** - Use custom networks
+6. **No privileged mode** unless absolutely necessary
+
+### 9.8 Development Workflow
+
+```bash
+# Local development testing workflow
+
+# 1. Make changes to dotfiles
+vim dotfiles.toml
+
+# 2. Test in Docker (safe)
+make test-ubuntu
+
+# 3. Debug if needed
+make debug-ubuntu
+# Inside container:
+python -m dotfiles_sync --dry-run
+python -m dotfiles_sync --apply
+ls -la ~/
+
+# 4. Run full test suite
+make test-all
+
+# 5. Clean up
+make clean-tests
+```
+
+### 9.9 Test Coverage Report
+
+```python
+# tests/integration/test_coverage.py
+import coverage
+import json
+from pathlib import Path
+
+def generate_coverage_report():
+    """Generate test coverage report"""
+    cov = coverage.Coverage()
+    cov.start()
+    
+    # Run all tests
+    pytest.main(["-v", "tests/"])
+    
+    cov.stop()
+    cov.save()
+    
+    # Generate reports
+    cov.html_report(directory="coverage_html")
+    cov.json_report(outfile="coverage.json")
+    
+    # Check coverage threshold
+    total = cov.report()
+    assert total >= 80, f"Coverage {total}% is below 80% threshold"
+    
+    return total
+```
+
+---
+
+## 10 Migration Guide
 
 ### From existing dotfiles:
 1. Create `dotfiles.toml` with safety settings enabled
@@ -755,7 +1150,7 @@ class AsdfPlugins(Verb):
 
 ---
 
-## 10 Security Best Practices
+## 11 Security Best Practices
 
 1. **Never store secrets in the repo**, even encrypted
 2. **Always verify checksums** for downloaded binaries
@@ -770,7 +1165,7 @@ class AsdfPlugins(Verb):
 
 ---
 
-## Summary
+## 12 Summary
 
 This enhanced specification uses **TOML format** (like Cargo.toml) and prioritizes **safety and security** while maintaining the flexibility of a custom dotfiles system:
 
@@ -780,7 +1175,8 @@ This enhanced specification uses **TOML format** (like Cargo.toml) and prioritiz
 - **Clear behavior**: Explicit precedence rules, conflict detection, comprehensive logging
 - **Cross-platform**: Works on Linux, macOS, Windows (WSL), ARM and x86
 - **Extensible**: Add new operations without changing core engine
-- **Testable**: Schema validation, automated tests, dry-run mode
+- **Thoroughly testable**: Docker-based integration testing across multiple OS distributions
+- **CI/CD ready**: Automated testing with GitHub Actions, parallel test execution
 - **Familiar patterns**: Follows conventions from Cargo.toml, pyproject.toml
 
 The system is designed to **fail safely** – any error triggers automatic rollback, and destructive operations require explicit confirmation. With TOML's clarity and built-in safety features, you can confidently manage dotfiles across all your machines without fear of breaking critical configurations.
