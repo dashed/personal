@@ -75,16 +75,8 @@ RUN mkdir -p test-dotfiles && \
 # Create a test configuration with safety features enabled
 RUN printf '[package]\nname = "test-dotfiles"\nversion = "1.0.0"\nauthor = "Test User <test@example.com>"\n\n[safety]\ndry_run_default = true\nbackup_before_modify = true\nbackup_retention_days = 7\nverify_checksums = true\n\n[security]\nwhitelist_paths = ["/home/testuser/**", "/tmp/**"]\nblacklist_paths = ["/etc/**", "/root/**"]\nenable_command_whitelist = false\n\n[[step]]\nop = "link"\nsrc = "test-dotfiles/test-zshrc"\ndst = "~/.test-zshrc"\nvariants = ["all"]\n\n[[step]]\nop = "copy"\nsrc = "test-dotfiles/test-gitconfig"\ndst = "~/.test-gitconfig"\nvariants = ["all"]\n\n[[step]]\nop = "link"\nsrc = "test-dotfiles/test-aliases"\ndst = "~/.test-aliases"\nvariants = ["default", "personal"]\n' > test-config.toml
 
-# Run comprehensive tests with the test runner
-RUN bash ./docker-test-runner.sh
-
-# Final stage: Results and verification
+# Final stage: Ready for testing
 FROM test as final
-HEALTHCHECK --interval=5s --timeout=3s \
-    CMD test -f /tmp/test-results.json
 
-# Show results
-RUN echo "=== Comprehensive Integration Test Results ===" && \
-    cat /tmp/test-results.json
-
-ENTRYPOINT ["cat", "/tmp/test-results.json"]
+# Default command for testing
+CMD ["/bin/bash"]

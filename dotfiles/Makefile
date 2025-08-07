@@ -14,9 +14,9 @@ help:
 	@echo "Development:"
 	@echo "  make test         Run unit tests with coverage"
 	@echo "  make test-v       Run tests with verbose output"
-	@echo "  make lint         Run linters (ruff, mypy)"
+	@echo "  make lint         Run linters (ruff)"
 	@echo "  make format       Format code with ruff"
-	@echo "  make typecheck    Run mypy type checking"
+	@echo "  make typecheck    Run ty type checking (strict)"
 	@echo "  make ty           Run ty type checking (fast)"
 	@echo "  make quick-check  Run ty + ruff (fast checks)"
 	@echo ""
@@ -64,7 +64,6 @@ test-file:
 # Run linters
 lint:
 	uv run ruff check src/ tests/
-	uv run mypy src/
 
 # Format code
 format:
@@ -73,7 +72,7 @@ format:
 
 # Type checking only
 typecheck:
-	uv run mypy src/ --strict
+	uv run ty check src/
 
 # Fast type checking with ty
 ty:
@@ -89,9 +88,17 @@ quick-check:
 	uv run ruff check src/ tests/
 	@echo "✅ Quick checks passed!"
 
-# Run all checks
-check: lint typecheck test
-	@echo "✅ All checks passed!"
+# Fast check without Docker (for rapid development)
+check-fast: lint typecheck test
+	@echo "✅ Fast checks passed (unit tests only)!"
+
+# Run all checks (including Docker integration tests)
+check: lint typecheck test docker-integration-tests
+	@echo "✅ All checks passed (including Docker integration tests)!"
+
+# Alias for CI/CD - run everything
+check-all: check
+	@echo "🎆 Complete validation successful!"
 
 # Clean build artifacts and cache
 clean:
@@ -100,7 +107,6 @@ clean:
 	rm -rf *.egg-info
 	rm -rf .pytest_cache/
 	rm -rf .ruff_cache/
-	rm -rf .mypy_cache/
 	rm -rf __pycache__/
 	rm -rf src/**/__pycache__/
 	rm -rf tests/**/__pycache__/
@@ -221,11 +227,35 @@ docker-test:
 	@mkdir -p test-results
 	@docker-compose -f docker-compose.test.yml up --build phase1-ubuntu-default 2>&1 | tee test-results/docker-test.log | grep -E "TEST|PASSED|FAILED|SKIPPED|━━━|✓|✗|⊘|✅|❌|Pass Rate" || true
 	@docker-compose -f docker-compose.test.yml down
+
+# Test new verb implementations in Docker
+docker-test-new-verbs:
+	@echo "Testing new verb implementations in Docker..."
+	@docker build -t dotfiles-new-verbs-test -f Dockerfile.test .
+	@docker run --rm -v $(PWD):/app dotfiles-new-verbs-test python /app/tests/integration/docker_test_new_verbs.py
 	@echo ""
 	@if docker-compose -f docker-compose.test.yml run --rm phase1-ubuntu-default cat /tmp/test-results.json 2>/dev/null; then \
 		echo ""; \
 		echo "Test results saved to test-results/"; \
 	fi
+
+# Run ALL integration tests in Docker (safe) - main command
+docker-integration-tests:
+	@echo "🐳 Running ALL integration tests in Docker (safe environment)..."
+	@docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1)
+	@echo "Running unit tests in Docker..."
+	@docker run --rm -v $(PWD):/app --entrypoint sh dotfiles-test -c "cd /app && uv run pytest tests/unit -q"
+	@echo "Running integration tests in Docker..."
+	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 --entrypoint python dotfiles-test /app/tests/integration/run_integration_tests.py || (echo "❌ Integration tests failed" && exit 1)
+	@echo "✅ All tests passed in Docker!"
+
+# Alias for backward compatibility
+docker-integration: docker-integration-tests
+
+# Verify integration tests are Docker-only (will fail if not in Docker)
+verify-docker-guard:
+	@echo "Verifying integration tests have Docker guards..."
+	@python3 -c "import sys; sys.path.insert(0, 'tests/integration'); from docker_only_guard import require_docker; require_docker()" 2>&1 | grep -q "SAFETY ERROR" && echo "✅ Docker guard prevents host execution" || echo "❌ Docker guard failed - integration tests might run on host!"
 
 # Test specific variant
 docker-test-variant:

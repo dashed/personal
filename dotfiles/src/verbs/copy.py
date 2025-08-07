@@ -23,7 +23,7 @@ class CopyVerb(Verb):
     at the destination path, with checksum verification.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the copy verb."""
         super().__init__("copy")
     
@@ -291,7 +291,7 @@ class CopyVerb(Verb):
     
     def _capture_original_state(self, dst_path: Path) -> Dict[str, Any]:
         """Capture the original state of the destination."""
-        state = {
+        state: Dict[str, Any] = {
             "existed": dst_path.exists(),
         }
         

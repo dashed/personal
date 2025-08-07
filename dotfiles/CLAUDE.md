@@ -29,25 +29,40 @@ This is a **safety-first, declarative dotfiles management system** written in Py
 
 ## Current Implementation Status
 
-### ✅ Phase 0: Foundation (COMPLETED)
+### ✅ Phase 0: Foundation (COMPLETED - August 6, 2025)
 - Project structure with uv package management
 - TOML configuration parsing with Pydantic validation
 - SQLite state database with comprehensive schema
 - CLI with Click framework and Rich output
-- 39 unit tests with 72% coverage
-- Development tooling (Makefile, ruff, mypy, ty)
+- Development tooling (Makefile, ruff, ty)
 
-### 🚧 Phase 1: Core MVP (IN PROGRESS)
-- **Verb system**: Base class and link/copy operations implemented
+### ✅ Phase 1: Core MVP (COMPLETED - August 6, 2025)
+- **Verb system**: Base class with 8 verb implementations
 - **Transaction support**: Full rollback capabilities
 - **Docker testing**: Safe isolated testing environment
-- **Current focus**: Fixing integration bugs and testing
+- **Operations**: link, copy, syncdir, append, prepend, run, run_once
 
-### ⏳ Future Phases
-- Phase 2: Safety Layer (backups, validation, drift detection)
-- Phase 3: Extended Operations (package managers, templates, secrets)
-- Phase 4: Testing Infrastructure (CI/CD, performance benchmarks)
-- Phase 5: Production Readiness (optimization, documentation)
+### ✅ Phase 2: Safety Layer (COMPLETED - August 6, 2025)
+- **Backup system**: Automatic backups with manifest tracking
+- **Path validation**: Whitelist/blacklist with macOS symlink support
+- **Transaction management**: Enhanced with context managers
+- **Drift detection**: Configuration change monitoring
+
+### ✅ Phase 4: Testing Infrastructure (COMPLETED - August 6, 2025)
+- **Docker suite**: Multi-OS testing (Ubuntu, Debian)
+- **Test coverage**: 151 unit tests with 65% coverage
+- **Integration tests**: 14 comprehensive Docker tests
+- **Test runner**: Enhanced with color-coded statistics
+
+### 🚧 Phase 3: Extended Operations (NEXT)
+- Package manager integrations (brew, apt)
+- Template support with Jinja2
+- Secret management
+
+### ⏳ Phase 5: Production Readiness (PLANNED)
+- Performance optimization
+- Monitoring and observability
+- Comprehensive documentation
 
 ## Architecture
 
@@ -61,11 +76,23 @@ src/dotfiles_sync/
 ├── database.py         # Database interface wrapper
 └── state_database.py   # Full SQLite implementation
 
+src/safety/
+├── __init__.py         # Safety module exports
+├── backup.py           # BackupManager with manifest tracking
+├── validator.py        # Path and permission validation
+├── transaction.py      # Enhanced transaction management
+└── drift.py            # Drift detection and reporting
+
 src/verbs/
-├── __init__.py         # Verb registry and executor
+├── __init__.py         # Verb registry and enhanced executor
 ├── base.py             # Abstract Verb base class
 ├── link.py             # Symlink operations
-└── copy.py             # File copy operations
+├── copy.py             # File copy operations
+├── syncdir.py          # Directory synchronization
+├── append.py           # File append operations
+├── prepend.py          # File prepend operations
+├── run.py              # Shell command execution
+└── run_once.py         # One-time command execution
 ```
 
 ### Key Models (Pydantic v2)
@@ -97,11 +124,6 @@ src/verbs/
 
 ## Important Implementation Notes
 
-### Current Bugs (Being Fixed)
-1. **ExecutionContext._config missing**: Needs config reference for security validation
-2. **OperationResult.operation_id**: Missing required field in Pydantic model
-3. **Database transaction methods**: Interface mismatch between TransactionContext and StateDatabase
-
 ### Safety Features Implemented
 - **Dry-run by default**: All operations preview changes first
 - **Backup system**: Automatic backups before modifications  
@@ -120,8 +142,7 @@ The system uses TOML configuration with these main sections:
 ### Development Tools
 - **uv**: Fast Python package management
 - **ruff**: Linting and formatting  
-- **mypy**: Static type checking
-- **ty**: Fast type checking (Rust-based)
+- **ty**: Fast type checking (Rust-based, replacing mypy)
 - **pytest**: Testing framework with coverage
 - **Rich**: CLI output formatting
 - **Click**: Command-line interface framework
@@ -129,9 +150,9 @@ The system uses TOML configuration with these main sections:
 ## Testing Strategy
 
 ### Unit Tests (Safe)
-- 39 tests covering core functionality
-- 72% overall coverage, 94% for models
-- Tests Pydantic validation, path handling, context management
+- 151 tests covering all components
+- 65% overall coverage
+- Tests for core, safety, and verb components
 - Run with: `make test`
 
 ### Integration Tests (Docker Only)
@@ -145,12 +166,24 @@ The system uses TOML configuration with these main sections:
 ```
 tests/
 ├── unit/
-│   ├── test_cli.py       # CLI command testing
-│   ├── test_config.py    # Configuration parsing
-│   └── test_context.py   # Context management
+│   ├── test_cli.py         # CLI command testing
+│   ├── test_config.py      # Configuration parsing
+│   ├── test_context.py     # Context management
+│   ├── test_models.py      # Pydantic model validation
+│   ├── test_state_database.py  # Database operations
+│   ├── safety/
+│   │   ├── test_backup.py      # BackupManager tests
+│   │   ├── test_validator.py   # SafetyValidator tests
+│   │   ├── test_transaction.py # TransactionManager tests
+│   │   └── test_drift.py       # DriftDetector tests
+│   └── verbs/
+│       └── test_*.py       # Verb implementation tests
 ├── fixtures/
-│   └── test_config.toml  # Test configuration
-└── integration/          # Docker integration tests
+│   └── test_config.toml   # Test configuration
+└── integration/            # Docker integration tests
+    ├── docker_only_guard.py        # Safety enforcement
+    ├── docker_test_*.py            # Integration test suites
+    └── docker_test_database_methods.py  # Database integration tests
 ```
 
 ## Common Development Tasks
@@ -186,9 +219,8 @@ tests/
 ### Development
 - `pytest>=8.4.1` - Testing
 - `pytest-cov>=5.0.0` - Coverage reporting
-- `mypy>=1.13.0` - Static type checking  
 - `ruff>=0.8.0` - Linting and formatting
-- `ty>=0.0.1a16` - Fast type checking
+- `ty>=0.0.1a16` - Fast type checking (replacing mypy)
 
 ## Files to Never Modify Directly During Development
 - Real `~/.zshrc`, `~/.gitconfig`, or any dotfiles in home directory
@@ -221,5 +253,5 @@ tests/
 
 ---
 
-**Last Updated**: Phase 1 development - Docker testing infrastructure complete
-**Next Priority**: Fix integration bugs and complete Phase 1 MVP testing
+**Last Updated**: August 7, 2025 - Phases 0, 1, 2, and 4 complete
+**Next Priority**: Phase 3 - Extended Operations (package managers, templates, secrets)

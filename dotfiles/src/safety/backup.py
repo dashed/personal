@@ -63,7 +63,7 @@ class BackupManager:
             safety_config: Safety configuration for retention policies
         """
         self.backup_root = backup_root or Path.home() / ".local/state/dotfiles/backups"
-        self.safety_config = safety_config or SafetyConfig()
+        self.safety_config = safety_config or SafetyConfig.model_construct()
         self.system_info = SystemInfo.from_current_system()
         
         # Ensure backup directory exists
@@ -108,7 +108,8 @@ class BackupManager:
                 created_at=timestamp,
                 created_by_transaction=transaction_id,
                 reason=reason,
-                system_info=self.system_info
+                system_info=self.system_info,
+                total_size_bytes=0
             )
             
             total_size = 0
@@ -188,7 +189,7 @@ class BackupManager:
         Returns:
             List of backup manifests
         """
-        backups = []
+        backups: List[BackupManifest] = []
         
         if not self.backup_root.exists():
             return backups

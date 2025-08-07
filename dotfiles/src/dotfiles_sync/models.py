@@ -9,7 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 # ============================================================================
@@ -207,7 +207,7 @@ class DotfilesConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
     
     package: PackageConfig
-    safety: SafetyConfig = Field(default_factory=SafetyConfig)
+    safety: SafetyConfig = Field(default_factory=lambda: SafetyConfig.model_construct())
     security: Optional[SecurityConfig] = None
     step: List[StepConfig] = Field(default_factory=list, description="Configuration steps")
     
@@ -298,7 +298,8 @@ class ExecutionContext(BaseModel):
             return Path(v).expanduser().resolve()
         elif isinstance(v, Path):
             return v.expanduser().resolve()
-        return v
+        else:
+            return Path(v).expanduser().resolve()
     
     def expand_path(self, path: str) -> Path:
         """Expand a path with home directory and make absolute."""
@@ -348,7 +349,7 @@ class OperationResult(BaseModel):
 
 class AppSettings(BaseSettings):
     """Application settings from environment variables."""
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         env_prefix="DOTFILES_",
         env_nested_delimiter="__",
         frozen=True
@@ -381,4 +382,7 @@ class AppSettings(BaseSettings):
             return None
         if isinstance(v, str):
             return Path(v).expanduser().resolve()
-        return v
+        elif isinstance(v, Path):
+            return v.expanduser().resolve()
+        else:
+            return Path(v).expanduser().resolve() if v is not None else None

@@ -186,6 +186,9 @@ def rollback(ctx: ExecutionContext, rollback_to: Optional[str]) -> None:
         console.print("Use 'dotfiles-sync history' to see available transactions")
         sys.exit(1)
     
+    # Type narrowing - rollback_to is guaranteed to be str here
+    assert rollback_to is not None
+    
     try:
         with StateDatabase() as db:
             if ctx.dry_run:

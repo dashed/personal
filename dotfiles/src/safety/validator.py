@@ -47,7 +47,7 @@ class PathValidator:
         Args:
             security_config: Security configuration with path policies
         """
-        self.security_config = security_config or SecurityConfig()
+        self.security_config = security_config or SecurityConfig.model_construct()
         self._whitelist_patterns = self._compile_patterns(self.security_config.whitelist_paths)
         self._blacklist_patterns = self._compile_patterns(self.security_config.blacklist_paths)
         
@@ -182,6 +182,7 @@ class PathValidator:
             return ValidationResult(
                 valid=True,
                 message=f"Path {absolute_path} is valid",
+                error_code=None,
                 details={"path": str(absolute_path), "resolved": str(resolved_path)}
             )
             
@@ -225,6 +226,7 @@ class PathValidator:
             return ValidationResult(
                 valid=True,
                 message=f"Source path {resolved_path} is valid",
+                error_code=None,
                 details={"path": str(resolved_path)}
             )
             
@@ -274,6 +276,7 @@ class PermissionValidator:
             return ValidationResult(
                 valid=True,
                 message=f"Write permission available for {path}",
+                error_code=None,
                 details={"path": str(path)}
             )
             
@@ -302,7 +305,8 @@ class PermissionValidator:
                 return ValidationResult(
                     valid=False,
                     message=f"Cannot check mode of non-existent file {path}",
-                    error_code="FILE_NOT_FOUND"
+                    error_code="FILE_NOT_FOUND",
+                    details=None
                 )
             
             current_mode = oct(path.stat().st_mode)[-3:]
@@ -319,6 +323,7 @@ class PermissionValidator:
             return ValidationResult(
                 valid=True,
                 message=f"File mode {current_mode} matches expected",
+                error_code=None,
                 details={"path": str(path), "mode": current_mode}
             )
             
@@ -397,6 +402,7 @@ class ChecksumValidator:
         return ValidationResult(
             valid=True,
             message=f"Checksum verified for {path}",
+            error_code=None,
             details={"path": str(path), "checksum": actual_checksum}
         )
 
@@ -413,7 +419,7 @@ class CommandValidator:
         Args:
             security_config: Security configuration with command policies
         """
-        self.security_config = security_config or SecurityConfig()
+        self.security_config = security_config or SecurityConfig.model_construct()
     
     def validate_command(self, command: str) -> ValidationResult:
         """
@@ -429,6 +435,7 @@ class CommandValidator:
             return ValidationResult(
                 valid=True,
                 message="Command whitelisting disabled",
+                error_code=None,
                 details={"command": command}
             )
         
@@ -438,6 +445,7 @@ class CommandValidator:
                 return ValidationResult(
                     valid=True,
                     message=f"Command allowed by whitelist: {allowed_cmd}",
+                    error_code=None,
                     details={"command": command, "matched_pattern": allowed_cmd}
                 )
         
@@ -466,8 +474,8 @@ class SafetyValidator:
             security_config: Security configuration
             safety_config: Safety configuration
         """
-        self.security_config = security_config or SecurityConfig()
-        self.safety_config = safety_config or SafetyConfig()
+        self.security_config = security_config or SecurityConfig.model_construct()
+        self.safety_config = safety_config or SafetyConfig.model_construct()
         
         self.path_validator = PathValidator(self.security_config)
         self.command_validator = CommandValidator(self.security_config)
@@ -530,7 +538,8 @@ class SafetyValidator:
             results.append(ValidationResult(
                 valid=False,
                 message="No configuration provided in execution context",
-                error_code="NO_CONFIG"
+                error_code="NO_CONFIG",
+                details=None
             ))
             return results
         
@@ -541,7 +550,8 @@ class SafetyValidator:
                 results.append(ValidationResult(
                     valid=False,
                     message="Safety configuration missing",
-                    error_code="NO_SAFETY_CONFIG"
+                    error_code="NO_SAFETY_CONFIG",
+                    details=None
                 ))
             
             # Validate all steps in configuration

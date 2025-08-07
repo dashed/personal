@@ -203,7 +203,7 @@ class Verb(ABC):
         
         return errors
     
-    def _is_path_allowed(self, path: Path, security_config) -> bool:
+    def _is_path_allowed(self, path: Path, security_config: Any) -> bool:
         """Check if a path is allowed by security configuration."""
         path_str = str(path.resolve())
         

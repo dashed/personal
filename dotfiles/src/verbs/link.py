@@ -21,7 +21,7 @@ class LinkVerb(Verb):
     pointing to the source file in the dotfiles repository.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the link verb."""
         super().__init__("link")
     
@@ -246,7 +246,7 @@ class LinkVerb(Verb):
     
     def _capture_original_state(self, dst_path: Path) -> Dict[str, Any]:
         """Capture the original state of the destination."""
-        state = {
+        state: Dict[str, Any] = {
             "existed": dst_path.exists(),
             "was_symlink": dst_path.is_symlink() if dst_path.exists() else False,
         }

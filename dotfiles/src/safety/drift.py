@@ -83,8 +83,8 @@ class DriftReport(BaseModel):
     
     def generate_summary(self) -> None:
         """Generate summary statistics."""
-        drift_by_type = {}
-        drift_by_severity = {}
+        drift_by_type: Dict[str, int] = {}
+        drift_by_severity: Dict[str, int] = {}
         
         for result in self.drift_results:
             # Count by type
@@ -222,7 +222,7 @@ class DriftDetector:
                     actual_value="symlink",
                     suggestion="Re-run dotfiles sync to restore correct file type"
                 ))
-            elif file_path.is_file() and expected_type == "symlink":
+            elif file_path.is_file() and not file_path.is_symlink() and expected_type == "symlink":
                 results.append(DriftResult(
                     applied_step_id=applied_step_id,
                     file_path=file_path_str,
@@ -255,7 +255,7 @@ class DriftDetector:
         Returns:
             Comprehensive drift report
         """
-        report = DriftReport()
+        report = DriftReport(total_files_checked=0)
         
         try:
             # Get all currently applied steps from database
@@ -283,13 +283,15 @@ class DriftDetector:
             
             # Record drift results in database
             for result in report.drift_results:
-                self.database.record_drift_detection(
-                    applied_step_id=result.applied_step_id,
-                    expected_checksum=result.expected_value,
-                    actual_checksum=result.actual_value,
-                    drift_type=result.drift_type.value,
-                    details=result.details
-                )
+                if result.applied_step_id:
+                    self.database.record_drift(
+                        applied_step_id=result.applied_step_id,
+                        expected_checksum=result.expected_value or "",
+                        actual_checksum=result.actual_value or "",
+                        drift_type=result.drift_type.value,
+                        severity=result.severity.value,
+                        details=result.details
+                    )
             
             # Generate summary
             report.generate_summary()
@@ -310,7 +312,7 @@ class DriftDetector:
         Returns:
             Drift report for specified files
         """
-        report = DriftReport()
+        report = DriftReport(total_files_checked=0)
         
         try:
             for file_path in file_paths:
@@ -350,7 +352,10 @@ class DriftDetector:
             List of historical drift detection results
         """
         try:
-            return self.database.get_drift_history(days)
+            # Get drift history from database (limit based on days)
+            # Approximately 10 checks per day as a rough estimate
+            limit = days * 10 if days else 100
+            return self.database.get_drift_history(limit=limit)
         except Exception:
             return []
     
@@ -362,7 +367,13 @@ class DriftDetector:
             Dictionary with drift summary statistics
         """
         try:
-            return self.database.get_drift_summary()
+            drift_list = self.database.get_drift_summary()
+            # Convert list to summary dict
+            return {
+                "total_drift": len(drift_list),
+                "drift_items": drift_list,
+                "timestamp": datetime.now().isoformat()
+            }
         except Exception:
             return {"error": "Unable to retrieve drift summary"}
     

@@ -12,7 +12,7 @@ Enhanced with Phase 2 safety features including:
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 import logging
 
 from dotfiles_sync.models import DotfilesConfig, StepConfig, OperationResult
@@ -30,6 +30,11 @@ from safety import (
 from .base import Verb
 from .link import LinkVerb
 from .copy import CopyVerb
+from .syncdir import SyncDirVerb
+from .append import AppendVerb
+from .prepend import PrependVerb
+from .run import RunVerb
+from .run_once import RunOnceVerb
 
 logger = logging.getLogger(__name__)
 
@@ -42,17 +47,22 @@ class VerbRegistry:
     and provides factory methods for creating verb instances.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the verb registry with built-in verbs."""
         self._verbs: Dict[str, Type[Verb]] = {}
         self._register_builtin_verbs()
     
-    def _register_builtin_verbs(self):
+    def _register_builtin_verbs(self) -> None:
         """Register all built-in verb implementations."""
         self.register("link", LinkVerb)
         self.register("copy", CopyVerb)
+        self.register("syncdir", SyncDirVerb)
+        self.register("append", AppendVerb)
+        self.register("prepend", PrependVerb)
+        self.register("run", RunVerb)
+        self.register("run_once", RunOnceVerb)
     
-    def register(self, operation_type: str, verb_class: Type[Verb]):
+    def register(self, operation_type: str, verb_class: Type[Verb]) -> None:
         """
         Register a verb implementation for an operation type.
         
@@ -75,7 +85,7 @@ class VerbRegistry:
         """
         verb_class = self._verbs.get(operation_type)
         if verb_class:
-            return verb_class()
+            return verb_class()  # type: ignore[call-arg]
         return None
     
     def list_verbs(self) -> List[str]:
@@ -136,7 +146,7 @@ class EnhancedOperationExecutor:
         Returns:
             List of operation results
         """
-        results = []
+        results: List[OperationResult] = []
         
         # Filter steps by platform and variant
         applicable_steps = self._filter_applicable_steps(config.step, exec_ctx)
@@ -346,7 +356,7 @@ class EnhancedOperationExecutor:
         step: StepConfig, 
         exec_ctx: ExecutionContext, 
         result: OperationResult
-    ) -> Optional[Dict]:
+    ) -> Optional[Dict[str, Any]]:
         """
         Create rollback action for a step result.
         

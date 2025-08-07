@@ -14,7 +14,7 @@ Builds on the existing state database transaction system.
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 from contextlib import contextmanager
 from pydantic import BaseModel, Field
 
@@ -76,7 +76,7 @@ class TransactionManager:
         self.database = database
         self.backup_manager = backup_manager or BackupManager()
         self.safety_validator = safety_validator or SafetyValidator()
-        self.safety_config = safety_config or SafetyConfig()
+        self.safety_config = safety_config or SafetyConfig.model_construct()
         
         self._active_transactions: Dict[str, EnhancedTransactionContext] = {}
     
@@ -116,7 +116,9 @@ class TransactionManager:
         
         # Create enhanced context
         enhanced_context = EnhancedTransactionContext(
-            base_context=base_context
+            base_context=base_context,
+            backup_id=None,
+            safety_checks_passed=False
         )
         
         # Store in active transactions
@@ -146,7 +148,8 @@ class TransactionManager:
             return [ValidationResult(
                 valid=False,
                 message=f"Transaction {transaction_id} not found",
-                error_code="TRANSACTION_NOT_FOUND"
+                error_code="TRANSACTION_NOT_FOUND",
+                details=None
             )]
         
         # Perform pre-flight validation
@@ -208,7 +211,7 @@ class TransactionManager:
         hostname: str,
         dry_run: bool = True,
         execution_context: Optional[ExecutionContext] = None
-    ):
+    ) -> Iterator[str]:
         """
         Context manager for safe transaction execution.
         
@@ -242,7 +245,9 @@ class TransactionManager:
             try:
                 # Create enhanced transaction context
                 enhanced_context = EnhancedTransactionContext(
-                    base_context=db_tx
+                    base_context=db_tx,
+                    backup_id=None,
+                    safety_checks_passed=False
                 )
                 self._active_transactions[transaction_id] = enhanced_context
                 
@@ -448,10 +453,7 @@ class TransactionManager:
         Returns:
             List of failed transaction information
         """
-        try:
-            return self.database.get_failed_transactions(limit)
-        except Exception:
-            return []
+        return self.database.get_failed_transactions(limit=limit)
     
     def cleanup_old_transactions(self, days: int = 30) -> int:
         """
@@ -463,10 +465,7 @@ class TransactionManager:
         Returns:
             Number of transactions cleaned up
         """
-        try:
-            return self.database.cleanup_old_transactions(days)
-        except Exception:
-            return 0
+        return self.database.cleanup_old_transactions(days=days)
 
 
 class TransactionError(Exception):

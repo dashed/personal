@@ -9,12 +9,14 @@ import sqlite3
 import json
 import hashlib
 import uuid
+import platform
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Optional, Dict, List, Any, Tuple
+from typing import Optional, Dict, List, Any, Tuple, Iterator, Union
 from contextlib import contextmanager
 import logging
 
+from dotfiles_sync import __version__
 from dotfiles_sync.models import TransactionContext
 
 logger = logging.getLogger(__name__)
@@ -27,10 +29,12 @@ class StateDatabase:
     Handles all state tracking, transactions, backups, and rollback operations.
     """
     
-    def __init__(self, db_path: Optional[Path] = None):
+    def __init__(self, db_path: Optional[Union[Path, str]] = None):
         """Initialize database connection and ensure schema exists."""
         if db_path is None:
             db_path = Path.home() / ".local" / "state" / "dotfiles" / "state.db"
+        elif isinstance(db_path, str):
+            db_path = Path(db_path)
         
         self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -51,7 +55,7 @@ class StateDatabase:
         self._init_schema()
         self._update_system_info()
     
-    def _init_schema(self):
+    def _init_schema(self) -> None:
         """Initialize database schema from SQL file."""
         schema_file = Path(__file__).parent / "state_database_schema.sql"
         if schema_file.exists():
@@ -60,9 +64,8 @@ class StateDatabase:
         else:
             logger.warning(f"Schema file not found: {schema_file}")
     
-    def _update_system_info(self):
+    def _update_system_info(self) -> None:
         """Update system information."""
-        import platform
         import getpass
         
         self.conn.execute("""
@@ -74,7 +77,7 @@ class StateDatabase:
             getpass.getuser(),
             platform.system().lower(),
             platform.machine(),
-            "1.0.0",  # TODO: Get from package version
+            __version__,
             platform.python_version()
         ))
     
@@ -84,7 +87,7 @@ class StateDatabase:
     
     @contextmanager
     def transaction(self, variant: str, user: str, hostname: str, 
-                   dry_run: bool = False, metadata: Optional[Dict] = None):
+                   dry_run: bool = False, metadata: Optional[Dict[str, Any]] = None) -> Iterator[TransactionContext]:
         """
         Context manager for atomic transactions.
         
@@ -149,14 +152,14 @@ class StateDatabase:
             VALUES (?, ?, ?, ?, ?, ?, 'pending')
         """, (tx.id, next_seq, operation_type, src_path, dst_path, json.dumps(config)))
         
-        return cursor.lastrowid
+        return cursor.lastrowid or 0
     
     def update_operation_status(self, operation_id: int, status: str,
                                error_message: Optional[str] = None,
-                               rollback_data: Optional[Dict] = None,
-                               checksums: Optional[Tuple[str, str]] = None):
+                               rollback_data: Optional[Dict[str, Any]] = None,
+                               checksums: Optional[Tuple[str, str]] = None) -> None:
         """Update operation status and metadata."""
-        params = [status]
+        params: List[Any] = [status]
         query_parts = ["UPDATE operations SET status = ?"]
         
         if error_message:
@@ -188,9 +191,9 @@ class StateDatabase:
     # ============================================================================
     
     def record_applied_step(self, tx: TransactionContext, operation_type: str,
-                           config: Dict, src_path: Optional[str] = None,
+                           config: Dict[str, Any], src_path: Optional[str] = None,
                            dst_path: Optional[str] = None, 
-                           checksum: Optional[str] = None):
+                           checksum: Optional[str] = None) -> None:
         """Record a successfully applied configuration step."""
         
         # Generate hash of the step configuration
@@ -206,7 +209,7 @@ class StateDatabase:
         """, (step_hash, operation_type, src_path, dst_path, checksum,
               json.dumps(config), tx.id))
     
-    def get_current_state(self, dst_path: Optional[str] = None) -> List[Dict]:
+    def get_current_state(self, dst_path: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get currently applied configuration."""
         if dst_path:
             cursor = self.conn.execute("""
@@ -238,9 +241,9 @@ class StateDatabase:
         """, (operation_id, str(backup_path), str(original_path),
               backup_type, size_bytes, checksum, expires_at))
         
-        return cursor.lastrowid
+        return cursor.lastrowid or 0
     
-    def get_backup_for_operation(self, operation_id: int) -> Optional[Dict]:
+    def get_backup_for_operation(self, operation_id: int) -> Optional[Dict[str, Any]]:
         """Get backup information for an operation."""
         cursor = self.conn.execute("""
             SELECT * FROM backups 
@@ -280,7 +283,7 @@ class StateDatabase:
     
     def record_run_once(self, tx: TransactionContext, command: str,
                        checksum: Optional[str] = None, exit_code: int = 0,
-                       output: Optional[str] = None):
+                       output: Optional[str] = None) -> None:
         """Record execution of a run-once operation."""
         
         hash_input = f"{command}:{checksum}:{tx.variant}"
@@ -302,7 +305,7 @@ class StateDatabase:
                                    package_manager: str, package_name: str,
                                    version: Optional[str] = None,
                                    is_pinned: bool = False,
-                                   metadata: Optional[Dict] = None):
+                                   metadata: Optional[Dict[str, Any]] = None) -> None:
         """Record package installation."""
         self.conn.execute("""
             INSERT OR REPLACE INTO installed_packages
@@ -312,7 +315,7 @@ class StateDatabase:
         """, (package_manager, package_name, version, tx.id,
               is_pinned, json.dumps(metadata) if metadata else None))
     
-    def get_installed_packages(self, package_manager: Optional[str] = None) -> List[Dict]:
+    def get_installed_packages(self, package_manager: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get list of installed packages."""
         if package_manager:
             cursor = self.conn.execute("""
@@ -327,7 +330,7 @@ class StateDatabase:
     # ROLLBACK OPERATIONS
     # ============================================================================
     
-    def get_rollback_operations(self, transaction_id: str) -> List[Dict]:
+    def get_rollback_operations(self, transaction_id: str) -> List[Dict[str, Any]]:
         """Get operations that need to be rolled back for a transaction."""
         cursor = self.conn.execute("""
             SELECT * FROM operations 
@@ -379,7 +382,8 @@ class StateDatabase:
     
     def record_drift(self, applied_step_id: int, expected_checksum: str,
                     actual_checksum: str, drift_type: str,
-                    details: Optional[Dict] = None):
+                    severity: str,
+                    details: Optional[Dict[str, Any]] = None) -> None:
         """Record detected drift."""
         self.conn.execute("""
             INSERT INTO drift_detection
@@ -388,7 +392,7 @@ class StateDatabase:
         """, (applied_step_id, expected_checksum, actual_checksum,
               drift_type, json.dumps(details) if details else None))
     
-    def get_drift_summary(self) -> List[Dict]:
+    def get_drift_summary(self) -> List[Dict[str, Any]]:
         """Get summary of detected drift."""
         cursor = self.conn.execute("SELECT * FROM drift_summary")
         return [dict(row) for row in cursor.fetchall()]
@@ -401,9 +405,8 @@ class StateDatabase:
                  severity: str = 'info',
                  transaction_id: Optional[str] = None,
                  operation_id: Optional[int] = None,
-                 details: Optional[Dict] = None):
+                 details: Optional[Dict[str, Any]] = None) -> None:
         """Add entry to audit log."""
-        import platform
         import getpass
         
         self.conn.execute("""
@@ -416,7 +419,7 @@ class StateDatabase:
               json.dumps(details) if details else None))
     
     def get_audit_log(self, limit: int = 100, 
-                     severity: Optional[str] = None) -> List[Dict]:
+                     severity: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get recent audit log entries."""
         if severity:
             cursor = self.conn.execute("""
@@ -473,15 +476,125 @@ class StateDatabase:
         
         return stats
     
-    def close(self):
+    # ============================================================================
+    # DRIFT DETECTION SUPPORT METHODS
+    # ============================================================================
+    
+    def get_drift_history(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get drift detection history.
+        
+        Args:
+            limit: Maximum number of drift records to return
+            
+        Returns:
+            List of drift detection records
+        """
+        cursor = self.conn.execute("""
+            SELECT 
+                dd.*,
+                ap.operation_type,
+                ap.dst_path,
+                ap.applied_at
+            FROM drift_detection dd
+            LEFT JOIN applied_steps ap ON dd.applied_step_id = ap.id
+            ORDER BY dd.checked_at DESC
+            LIMIT ?
+        """, (limit,))
+        
+        return [dict(row) for row in cursor.fetchall()]
+    
+    def get_current_applied_steps(self) -> List[Dict[str, Any]]:
+        """Get all currently applied configuration steps.
+        
+        Returns:
+            List of currently applied steps
+        """
+        cursor = self.conn.execute("""
+            SELECT * FROM applied_steps 
+            WHERE is_current = 1
+            ORDER BY applied_at DESC
+        """)
+        
+        return [dict(row) for row in cursor.fetchall()]
+    
+    def find_applied_step_by_path(self, path: str) -> Optional[Dict[str, Any]]:
+        """Find an applied step by destination path.
+        
+        Args:
+            path: Destination path to search for
+            
+        Returns:
+            Applied step record if found, None otherwise
+        """
+        cursor = self.conn.execute("""
+            SELECT * FROM applied_steps 
+            WHERE dst_path = ? AND is_current = 1
+            LIMIT 1
+        """, (path,))
+        
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    
+    def update_step_last_verified(self, step_id: int) -> None:
+        """Update the last verified timestamp for an applied step.
+        
+        Args:
+            step_id: ID of the applied step to update
+        """
+        self.conn.execute("""
+            UPDATE applied_steps 
+            SET last_verified_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (step_id,))
+    
+    # ============================================================================
+    # TRANSACTION MANAGEMENT SUPPORT METHODS
+    # ============================================================================
+    
+    def get_failed_transactions(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get recent failed transactions that may need rollback.
+        
+        Args:
+            limit: Maximum number of transactions to return
+            
+        Returns:
+            List of failed transaction records
+        """
+        cursor = self.conn.execute("""
+            SELECT * FROM transactions
+            WHERE status = 'failed'
+            ORDER BY started_at DESC
+            LIMIT ?
+        """, (limit,))
+        
+        return [dict(row) for row in cursor.fetchall()]
+    
+    def cleanup_old_transactions(self, days: int = 30) -> int:
+        """Clean up old completed transactions.
+        
+        Args:
+            days: Number of days to retain transactions
+            
+        Returns:
+            Number of transactions cleaned up
+        """
+        cursor = self.conn.execute("""
+            DELETE FROM transactions
+            WHERE status IN ('completed', 'rolled_back')
+            AND completed_at < datetime('now', '-' || ? || ' days')
+        """, (days,))
+        
+        return cursor.rowcount
+    
+    def close(self) -> None:
         """Close database connection."""
         if self.conn:
             self.conn.close()
     
-    def __enter__(self):
+    def __enter__(self) -> "StateDatabase":
         return self
     
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.close()
 
 
