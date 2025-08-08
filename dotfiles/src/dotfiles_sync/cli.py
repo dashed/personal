@@ -203,34 +203,66 @@ def rollback(ctx: ExecutionContext, rollback_to: Optional[str], file: Optional[s
                 # Find the applied step for this file
                 applied_step = db.find_applied_step_by_path(str(file_path))
                 if not applied_step:
+                    # Debug: Check what paths are actually in the database
+                    cursor = db.conn.execute("SELECT dst_path, is_current FROM applied_steps ORDER BY dst_path")
+                    all_paths = cursor.fetchall()
                     console.print(f"[red]✗[/red] File not managed by dotfiles-sync: {file}")
+                    console.print(f"[yellow]Debug:[/yellow] Looking for: {str(file_path)}")
+                    console.print(f"[yellow]Debug:[/yellow] Available paths in DB:")
+                    for path_row in all_paths:
+                        console.print(f"  - {path_row[0]} (current={path_row[1]})")
                     sys.exit(1)
                 
                 if ctx.dry_run:
                     console.print(f"[yellow]DRY RUN:[/yellow] Would restore {file_path}")
-                    console.print(f"  Source: {applied_step.src_path}")
-                    console.print(f"  Operation: {applied_step.operation_type}")
+                    console.print(f"  Source: {applied_step['src_path']}")
+                    console.print(f"  Operation: {applied_step['operation_type']}")
                 else:
-                    # Import the verb registry and re-apply the operation
+                    # Import required modules for restoration
                     from verbs import VerbRegistry
+                    from dotfiles_sync.models import StepConfig, OperationType
+                    from dotfiles_sync.context import OperationContext
+                    import json
                     
-                    # Create a mock step config for re-application
-                    step_config = {
-                        "op": applied_step.operation_type,
-                        "src": applied_step.src_path,
-                        "dst": str(file_path),
-                    }
-                    
-                    # Get and apply the verb
-                    verb_registry = VerbRegistry()
-                    verb_class = verb_registry.get_verb(applied_step.operation_type)
-                    verb = verb_class(step_config, ctx)
-                    
-                    result = verb.apply()
-                    if result.success:
-                        console.print(f"[green]✓[/green] Successfully restored: {file_path}")
-                    else:
-                        console.print(f"[red]✗[/red] Failed to restore {file_path}: {result.message}")
+                    # Reconstruct the original step configuration
+                    try:
+                        original_config = json.loads(applied_step['config']) if applied_step['config'] else {}
+                        
+                        # Remove conflicting keys to avoid duplicate arguments
+                        config_to_use = {k: v for k, v in original_config.items() 
+                                        if k not in ('op', 'src', 'dst')}
+                        
+                        # Create StepConfig from the applied step data
+                        step_config = StepConfig(
+                            op=OperationType(applied_step['operation_type']),
+                            src=applied_step['src_path'],
+                            dst=str(file_path),
+                            **config_to_use  # Include any additional configuration
+                        )
+                        
+                        # Create operation context
+                        op_ctx = OperationContext(
+                            execution_context=ctx,
+                            operation_type=applied_step['operation_type'],
+                            step_config=step_config,
+                            sequence_num=1,
+                        )
+                        
+                        # Get and apply the verb
+                        verb_registry = VerbRegistry()
+                        verb = verb_registry.get_verb(applied_step['operation_type'])
+                        if not verb:
+                            console.print(f"[red]✗[/red] Unknown operation type: {applied_step['operation_type']}")
+                            sys.exit(1)
+                        
+                        result = verb.apply(step_config, op_ctx)
+                        if result.success:
+                            console.print(f"[green]✓[/green] Successfully restored: {file_path}")
+                        else:
+                            console.print(f"[red]✗[/red] Failed to restore {file_path}: {result.message}")
+                            sys.exit(1)
+                    except Exception as restore_error:
+                        console.print(f"[red]✗[/red] Failed to restore {file_path}: {restore_error}")
                         sys.exit(1)
                         
         except Exception as e:

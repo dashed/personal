@@ -127,7 +127,7 @@ Plug 'nvim-treesitter/nvim-treesitter'
         
         # Use new rollback --file command to restore just this file
         print("7. Using rollback --file to restore specific file...")
-        result = helper.run_command("rollback", "--file", str(gitconfig))
+        result = helper.run_command("--apply", "rollback", "--file", str(gitconfig))
         assert result.exit_code == 0, "File-specific rollback should succeed"
         
         # Verify the unwanted change is gone
@@ -294,7 +294,7 @@ def test_comprehensive_cli_integration():
         
         # Test rollback --file for one file
         print("5. Testing file-specific rollback...")
-        result = helper.run_command("rollback", "--file", str(zshrc))
+        result = helper.run_command("--apply", "rollback", "--file", str(zshrc))
         assert result.exit_code == 0, "File rollback should succeed"
         
         # Verify zshrc is restored but gitconfig still modified
