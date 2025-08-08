@@ -13,7 +13,7 @@ import fnmatch
 import importlib
 import importlib.util
 from pathlib import Path
-from typing import List, Dict, Callable, Tuple
+from typing import List, Dict, Tuple
 
 # Add integration directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
