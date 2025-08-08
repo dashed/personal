@@ -367,9 +367,9 @@ def main():
     print(f"RESULTS: {passed} passed, {failed} failed")
     print("=" * 60)
 
-    # Exit with appropriate code
-    sys.exit(0 if failed == 0 else 1)
+    # Return exit code instead of calling sys.exit
+    return 0 if failed == 0 else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
