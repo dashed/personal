@@ -34,12 +34,26 @@ help:
 	@echo "  make check        Run all checks (lint, typecheck, test)"
 	@echo ""
 	@echo "Docker Integration Testing:"
-	@echo "  make docker-test       Run tests with detailed statistics"
-	@echo "  make docker-test-quick Run tests with summary only"
-	@echo "  make docker-test-all   Run tests on all platforms"
-	@echo "  make docker-test-e2e   Run end-to-end user journey tests"
-	@echo "  make test-ubuntu       Test on Ubuntu container"
-	@echo "  make docker-clean      Clean up Docker resources"
+	@echo "  make docker-test                  Run all integration tests"
+	@echo "  make docker-test-pattern PATTERN Run tests matching pattern (* wildcards)"
+	@echo "  make docker-test-specific TEST=   Run a specific test by name"
+	@echo "  make docker-test-list             List all available integration tests"
+	@echo "  make docker-test-dry-run PATTERN  Show which tests would run (dry-run)"
+	@echo "  make docker-test-verbose PATTERN  Run tests with verbose output"
+	@echo "  make docker-test-quick            Run tests with summary only"
+	@echo "  make docker-test-all              Run tests on all platforms"
+	@echo "  make docker-clean                 Clean up Docker resources"
+	@echo ""
+	@echo "Pattern examples:"
+	@echo "  make docker-test-pattern PATTERN='*safety*'     # Safety tests"
+	@echo "  make docker-test-pattern PATTERN='*core* *cli*' # Core and CLI tests"
+	@echo "  make docker-test-specific TEST=docker_test_core_operations"
+	@echo ""
+	@echo "Quick shortcuts:"
+	@echo "  make docker-test-safety    # All safety-related tests"
+	@echo "  make docker-test-core      # Core operations tests"
+	@echo "  make docker-test-cli       # CLI command tests"
+	@echo "  make docker-test-database  # Database integration tests"
 
 # Install production dependencies
 install:
@@ -264,6 +278,59 @@ docker-integration-tests:
 
 # Alias for backward compatibility
 docker-integration: docker-integration-tests
+
+# === Pattern-Based Test Execution ===
+
+# Run tests matching a glob pattern
+docker-test-pattern:
+	@if [ -z "$(PATTERN)" ]; then echo "Usage: make docker-test-pattern PATTERN='*safety*'"; exit 1; fi
+	@echo "🔍 Running integration tests matching pattern: $(PATTERN)"
+	@docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1)
+	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 -e DOTFILES_TEST_MODE=true --entrypoint python dotfiles-test /app/tests/integration/run_integration_tests.py $(PATTERN)
+
+# Run a specific test by name
+docker-test-specific:
+	@if [ -z "$(TEST)" ]; then echo "Usage: make docker-test-specific TEST=docker_test_core_operations"; exit 1; fi
+	@echo "🎯 Running specific integration test: $(TEST)"
+	@docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1)
+	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 -e DOTFILES_TEST_MODE=true --entrypoint python dotfiles-test /app/tests/integration/run_integration_tests.py '$(TEST)'
+
+# List all available integration tests
+docker-test-list:
+	@echo "📋 Listing all available integration tests..."
+	@docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1)
+	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 --entrypoint python dotfiles-test /app/tests/integration/run_integration_tests.py --list
+
+# Show which tests would run without executing them
+docker-test-dry-run:
+	@if [ -z "$(PATTERN)" ]; then echo "Usage: make docker-test-dry-run PATTERN='*safety*'"; exit 1; fi
+	@echo "🏃‍♂️ Dry run - showing tests that would match pattern: $(PATTERN)"
+	@docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1)
+	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 --entrypoint python dotfiles-test /app/tests/integration/run_integration_tests.py --dry-run $(PATTERN)
+
+# Run tests with verbose output
+docker-test-verbose:
+	@if [ -z "$(PATTERN)" ]; then PATTERN_ARG=""; else PATTERN_ARG="'$(PATTERN)'"; fi; \
+	echo "🔊 Running integration tests with verbose output"; \
+	if [ -n "$(PATTERN)" ]; then echo "Pattern: $(PATTERN)"; fi; \
+	docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1); \
+	docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 -e DOTFILES_TEST_MODE=true --entrypoint python dotfiles-test /app/tests/integration/run_integration_tests.py --verbose $$PATTERN_ARG
+
+# Quick shortcuts for common test patterns
+docker-test-safety:
+	@$(MAKE) docker-test-pattern PATTERN='*safety*'
+
+docker-test-core:
+	@$(MAKE) docker-test-pattern PATTERN='*core*'
+
+docker-test-cli:
+	@$(MAKE) docker-test-pattern PATTERN='*cli*'
+
+docker-test-database:
+	@$(MAKE) docker-test-pattern PATTERN='*database*'
+
+docker-test-e2e-pattern:
+	@$(MAKE) docker-test-pattern PATTERN='*e2e*'
 
 # Verify integration tests are Docker-only (will fail if not in Docker)
 verify-docker-guard:
