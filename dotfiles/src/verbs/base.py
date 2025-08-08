@@ -204,21 +204,30 @@ class Verb(ABC):
         dst_path = ctx.get_dst_path()
         if dst_path and spec.dst:
             # Check against security whitelist/blacklist
-            # Note: Security validation will be implemented in Phase 2
-            # For Phase 1, we allow all paths within home directory
-            if not str(dst_path.resolve()).startswith(str(Path.home())):
-                errors.append(f"Destination path outside home directory not allowed: {dst_path}")
+            security_config = ctx.execution_context.config.security if ctx.execution_context.config else None
+            if security_config:
+                # Use the proper security validation with whitelist/blacklist
+                if not self._is_path_allowed(dst_path, security_config):
+                    errors.append(f"Destination path not allowed by security policy: {dst_path}")
+            else:
+                # Fallback to basic home directory check if no security config
+                if not str(dst_path.resolve()).startswith(str(Path.home())):
+                    errors.append(f"Destination path outside home directory not allowed: {dst_path}")
 
         return errors
 
     def _is_path_allowed(self, path: Path, security_config: Any) -> bool:
         """Check if a path is allowed by security configuration."""
-        path_str = str(path.resolve())
+        # Use absolute() instead of resolve() to avoid following symlinks
+        # This is important for broken symlinks or when we're about to replace a symlink
+        path_str = str(path.absolute())
 
         # Check blacklist first (takes precedence)
         if hasattr(security_config, "blacklist_paths"):
             for pattern in security_config.blacklist_paths or []:
+                # Expand both $HOME and ~ to the actual home directory
                 pattern = pattern.replace("$HOME", str(Path.home()))
+                pattern = str(Path(pattern).expanduser())
                 if self._path_matches_pattern(path_str, pattern):
                     return False
 
@@ -229,7 +238,9 @@ class Verb(ABC):
                 return True  # No whitelist means all paths allowed
 
             for pattern in whitelist:
+                # Expand both $HOME and ~ to the actual home directory
                 pattern = pattern.replace("$HOME", str(Path.home()))
+                pattern = str(Path(pattern).expanduser())
                 if self._path_matches_pattern(path_str, pattern):
                     return True
             return False  # Not in whitelist
