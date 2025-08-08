@@ -17,6 +17,7 @@ from dotfiles_sync import __version__
 from dotfiles_sync.config import ConfigLoader, ConfigValidationError
 from dotfiles_sync.context import ExecutionContext
 from dotfiles_sync.database import StateDatabase
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from verbs import OperationExecutor
 
@@ -90,11 +91,11 @@ def cli(
     capabilities, and cross-platform support.
     """
     setup_logging(log_level)
-    
+
     # If apply is set, override dry_run
     if apply:
         dry_run = False
-    
+
     # Create execution context
     ctx.obj = ExecutionContext(
         config_path=config,
@@ -102,7 +103,7 @@ def cli(
         dry_run=dry_run,
         force=force,
     )
-    
+
     # If no command specified, show help
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
@@ -113,18 +114,18 @@ def cli(
 def validate(ctx: ExecutionContext) -> None:
     """Validate the configuration file without executing any operations."""
     logger = logging.getLogger(__name__)
-    
+
     try:
         logger.info(f"Validating configuration: {ctx.config_path}")
         loader = ConfigLoader(ctx.config_path)
         config = loader.load()
         loader.validate(config)
-        
+
         console.print("[green]✓[/green] Configuration is valid!")
         console.print(f"  Package: {config.package.name} v{config.package.version}")
         console.print(f"  Safety: dry_run_default={config.safety.dry_run_default}")
         console.print(f"  Steps: {len(config.step)} operations defined")
-        
+
     except ConfigValidationError as e:
         console.print(f"[red]✗[/red] Configuration validation failed: {e}")
         sys.exit(1)
@@ -139,31 +140,31 @@ def validate(ctx: ExecutionContext) -> None:
 def status(ctx: ExecutionContext) -> None:
     """Show current system status and applied configurations."""
     logger = logging.getLogger(__name__)
-    
+
     try:
         with StateDatabase() as db:
             stats = db.get_statistics()
             current_state = db.get_current_state()
-            
+
             console.print("\n[bold]System Status[/bold]")
             console.print(f"  Database: {db.db_path}")
             console.print(f"  Applied steps: {stats['applied_steps']}")
-            
-            if stats['transactions']:
-                tx_stats = stats['transactions']
+
+            if stats["transactions"]:
+                tx_stats = stats["transactions"]
                 console.print("\n[bold]Transaction Statistics[/bold]")
                 console.print(f"  Total: {tx_stats['total']}")
                 console.print(f"  Completed: {tx_stats['completed']}")
                 console.print(f"  Failed: {tx_stats['failed']}")
                 console.print(f"  Rolled back: {tx_stats['rolled_back']}")
-            
+
             if current_state:
                 console.print("\n[bold]Current Configuration[/bold]")
                 for item in current_state[:10]:  # Show first 10 items
                     console.print(f"  • {item['dst_path']} ({item['operation_type']})")
                 if len(current_state) > 10:
                     console.print(f"  ... and {len(current_state) - 10} more")
-            
+
     except Exception as e:
         console.print(f"[red]✗[/red] Failed to get status: {e}")
         logger.exception("Status check failed")
@@ -180,15 +181,15 @@ def status(ctx: ExecutionContext) -> None:
 def rollback(ctx: ExecutionContext, rollback_to: Optional[str]) -> None:
     """Rollback to a previous state or specific transaction."""
     logger = logging.getLogger(__name__)
-    
+
     if not rollback_to:
         console.print("[yellow]![/yellow] No transaction ID specified")
         console.print("Use 'dotfiles-sync history' to see available transactions")
         sys.exit(1)
-    
+
     # Type narrowing - rollback_to is guaranteed to be str here
     assert rollback_to is not None
-    
+
     try:
         with StateDatabase() as db:
             if ctx.dry_run:
@@ -201,14 +202,16 @@ def rollback(ctx: ExecutionContext, rollback_to: Optional[str]) -> None:
                     if not click.confirm(f"Rollback transaction {rollback_to}?"):
                         console.print("Rollback cancelled")
                         return
-                
+
                 success = db.perform_rollback(rollback_to)
                 if success:
-                    console.print(f"[green]✓[/green] Successfully rolled back transaction {rollback_to}")
+                    console.print(
+                        f"[green]✓[/green] Successfully rolled back transaction {rollback_to}"
+                    )
                 else:
                     console.print(f"[red]✗[/red] Rollback failed for transaction {rollback_to}")
                     sys.exit(1)
-                    
+
     except Exception as e:
         console.print(f"[red]✗[/red] Rollback failed: {e}")
         logger.exception("Rollback failed")
@@ -220,28 +223,28 @@ def rollback(ctx: ExecutionContext, rollback_to: Optional[str]) -> None:
 def sync(ctx: ExecutionContext) -> None:
     """Synchronize dotfiles according to configuration."""
     logger = logging.getLogger(__name__)
-    
+
     try:
         # Load configuration
         loader = ConfigLoader(ctx.config_path)
         config = loader.load()
         loader.validate(config)
-        
+
         console.print("[bold]Syncing dotfiles[/bold]")
         console.print(f"  Config: {ctx.config_path}")
         console.print(f"  Variant: {ctx.variant}")
         console.print(f"  Mode: {'DRY RUN' if ctx.dry_run else 'APPLY'}")
         console.print()
-        
+
         # Execute operations using the OperationExecutor
         executor = OperationExecutor()
         results = executor.execute_all(config, ctx)
-        
+
         # Display results
         success_count = sum(1 for r in results if r.success)
         failure_count = len(results) - success_count
-        skipped_count = sum(1 for r in results if r.success and getattr(r, 'skipped', False))
-        
+        skipped_count = sum(1 for r in results if r.success and getattr(r, "skipped", False))
+
         console.print("\n[bold]Results Summary[/bold]")
         console.print(f"  Total operations: {len(results)}")
         console.print(f"  Successful: [green]{success_count}[/green]")
@@ -249,25 +252,27 @@ def sync(ctx: ExecutionContext) -> None:
             console.print(f"  Skipped (no changes): [yellow]{skipped_count}[/yellow]")
         if failure_count > 0:
             console.print(f"  Failed: [red]{failure_count}[/red]")
-        
+
         # Show individual operation results
         console.print("\n[bold]Operation Details[/bold]")
         for result in results:
             status_color = "green" if result.success else "red"
             status_symbol = "✓" if result.success else "✗"
             mode_indicator = " (dry run)" if result.dry_run else ""
-            
-            console.print(f"  [{status_color}]{status_symbol}[/{status_color}] {result.message}{mode_indicator}")
-        
+
+            console.print(
+                f"  [{status_color}]{status_symbol}[/{status_color}] {result.message}{mode_indicator}"
+            )
+
         # Show next steps for dry run
         if ctx.dry_run and success_count > 0:
             console.print("\n[yellow]ℹ[/yellow] This was a dry run. To apply changes, run:")
             console.print("  dotfiles-sync --apply sync")
-        
+
         # Exit with error code if any operations failed
         if failure_count > 0:
             sys.exit(1)
-        
+
     except ConfigValidationError as e:
         console.print(f"[red]✗[/red] Configuration error: {e}")
         sys.exit(1)

@@ -3,7 +3,7 @@ Safety components for the Dotfiles Management System.
 
 This package provides comprehensive safety and security features including:
 - Backup management and restoration
-- Path validation and permission checking  
+- Path validation and permission checking
 - Enhanced transaction handling
 - Drift detection and reporting
 
@@ -13,51 +13,41 @@ Phase 2: Safety Layer implementation.
 from .backup import BackupManager, BackupManifest, BackupError
 from .validator import (
     PathValidator,
-    PermissionValidator, 
+    PermissionValidator,
     ChecksumValidator,
     CommandValidator,
     SafetyValidator,
     ValidationResult,
-    ValidationError
+    ValidationError,
 )
 from .transaction import (
     TransactionManager,
     EnhancedTransactionContext,
     TransactionError,
     TransactionValidationError,
-    TransactionRollbackError
+    TransactionRollbackError,
 )
-from .drift import (
-    DriftDetector,
-    DriftMonitor,
-    DriftResult,
-    DriftReport,
-    DriftType,
-    DriftSeverity
-)
+from .drift import DriftDetector, DriftMonitor, DriftResult, DriftReport, DriftType, DriftSeverity
 
 __all__ = [
     # Backup components
     "BackupManager",
-    "BackupManifest", 
+    "BackupManifest",
     "BackupError",
-    
     # Validation components
     "PathValidator",
     "PermissionValidator",
-    "ChecksumValidator", 
+    "ChecksumValidator",
     "CommandValidator",
     "SafetyValidator",
     "ValidationResult",
     "ValidationError",
-    
     # Transaction components
     "TransactionManager",
     "EnhancedTransactionContext",
     "TransactionError",
-    "TransactionValidationError", 
+    "TransactionValidationError",
     "TransactionRollbackError",
-    
     # Drift detection components
     "DriftDetector",
     "DriftMonitor",

@@ -13,21 +13,26 @@ All integration tests run in Docker containers to ensure safe testing without af
 
 ## Executive Summary
 
-### Critical Test Gaps (Immediate Action Required)
-1. **Basic Operations**: `link` and `copy` verbs have NO tests despite being the most fundamental operations
-2. **CLI Commands**: Core commands (`validate`, `status`, `rollback`) lack integration tests
-3. **End-to-End Workflows**: No tests simulate real user journeys from setup to daily use
+### ✅ Recently Completed (August 8, 2025)
+1. **Basic Operations**: `link` and `copy` verbs now have comprehensive tests
+2. **CLI Commands**: Core commands (`validate`, `status`, `rollback`) fully tested
+3. **End-to-End Workflows**: Complete user journey tests implemented
+
+### Remaining Test Gaps
+1. **Safety Features**: Backup and restoration system needs testing
+2. **Performance Tests**: Large-scale operations and benchmarks not tested
+3. **Advanced Error Scenarios**: Edge cases and race conditions need coverage
 
 ### Test Coverage by Component
 | Component | Current Coverage | Priority |
 |-----------|-----------------|----------|
-| Basic Verbs (link, copy) | ❌ 0% | 🔴 Critical |
+| Basic Verbs (link, copy) | ✅ 100% | ✅ Complete |
 | Advanced Verbs (syncdir, append, etc.) | ✅ 100% | ✅ Complete |
-| CLI Commands | ❌ 25% | 🔴 Critical |
+| CLI Commands | ✅ 100% | ✅ Complete |
 | Safety Features (backup, validation) | ❌ 0% | 🟡 High |
 | Database Operations | ✅ 80% | ✅ Good |
-| End-to-End User Journeys | ❌ 0% | 🔴 Critical |
-| Error Handling | ⚠️ 40% | 🟡 Medium |
+| End-to-End User Journeys | ✅ 100% | ✅ Complete |
+| Error Handling | ✅ 80% | ✅ Good |
 | Performance Tests | ❌ 0% | 🟢 Low |
 
 ### Estimated Effort
@@ -39,7 +44,29 @@ All integration tests run in Docker containers to ensure safe testing without af
 
 ### ✅ Existing Integration Tests
 
-#### 1. **docker_test_new_verbs.py**
+#### 1. **docker_test_core_operations.py** (NEW - August 8, 2025)
+- ✅ `link` verb - symlink creation, replacement, broken links
+- ✅ `copy` verb - file copying, permissions, checksums
+- ✅ Link vs copy differences - modification propagation
+- ✅ Error handling - missing files, invalid paths
+- ✅ Dry run mode validation
+
+#### 2. **docker_test_cli_commands.py** (NEW - August 8, 2025)
+- ✅ `validate` command - TOML syntax, missing fields, invalid operations
+- ✅ `status` command - fresh system, after sync, drift detection
+- ✅ `rollback` command - transaction rollback, history viewing
+- ✅ Additional CLI features - help, version, verbose/quiet modes
+- ✅ Error recovery - permission denied, malformed configs
+
+#### 3. **docker_test_e2e_user_journeys.py** (August 7, 2025)
+- ✅ First-time user setup workflow
+- ✅ Daily developer workflow
+- ✅ Variant switching (personal/work)
+- ✅ Disaster recovery scenarios
+- ✅ Migration from existing dotfiles
+- ✅ Comprehensive workflow testing
+
+#### 4. **docker_test_new_verbs.py**
 - ✅ `syncdir` verb - directory synchronization with exclusions
 - ✅ `append` verb - file appending with markers
 - ✅ `prepend` verb - file prepending with markers
@@ -48,25 +75,16 @@ All integration tests run in Docker containers to ensure safe testing without af
 - ✅ Dry run mode validation
 - ✅ Error handling for invalid operations
 
-#### 2. **docker_test_database_methods.py**
+#### 5. **docker_test_database_methods.py**
 - ✅ Version tracking in database
 - ✅ Drift detection functionality
 - ✅ Transaction management (success/failure)
 - ✅ Database cleanup operations
 - ✅ CLI with database integration
 
-## Missing Test Coverage
+## Remaining Test Coverage Gaps
 
-### 🔴 Critical Gaps
-
-#### Core Verbs Not Tested
-- ❌ `link` verb - symlink creation (most common operation!)
-- ❌ `copy` verb - file copying (basic operation!)
-
-#### CLI Commands Not Tested
-- ❌ `validate` command
-- ❌ `status` command
-- ❌ `rollback` command
+### 🟡 High Priority
 
 #### Safety Features Not Tested
 - ❌ Backup creation and restoration
@@ -473,10 +491,10 @@ See `tests/integration/README.md` for detailed requirements.
 
 ## Implementation Priority
 
-### Phase 1: Critical Gaps (Immediate)
-1. **Basic verb tests** - link and copy operations
-2. **CLI command tests** - validate, status, rollback
-3. **E2E first-time user** - complete setup workflow
+### Phase 1: Critical Gaps (✅ COMPLETED - August 8, 2025)
+1. **Basic verb tests** - link and copy operations ✅
+2. **CLI command tests** - validate, status, rollback ✅
+3. **E2E first-time user** - complete setup workflow ✅
 
 ### Phase 2: Safety Coverage (Week 1)
 1. **Backup/restore tests**

@@ -24,12 +24,12 @@ def mock_context(tmp_path):
     exec_ctx.system_info = Mock(spec=SystemInfo)
     exec_ctx.system_info.username = "testuser"
     exec_ctx.system_info.hostname = "testhost"
-    
+
     op_ctx = Mock(spec=OperationContext)
     op_ctx.execution_context = exec_ctx
     op_ctx.operation_type = "syncdir"
     op_ctx.sequence_num = 1
-    
+
     return op_ctx
 
 
@@ -57,7 +57,7 @@ def test_syncdir_validate_src_not_exists(syncdir_verb, mock_context, tmp_path):
     """Test validation when source doesn't exist."""
     step = StepConfig(op=OperationType.SYNCDIR, src="nonexistent", dst="dest")
     mock_context.get_src_path = Mock(return_value=tmp_path / "nonexistent")
-    
+
     errors = syncdir_verb.validate(step, mock_context)
     assert "Source directory does not exist" in errors[0]
 
@@ -69,15 +69,15 @@ def test_syncdir_dry_run_success(syncdir_verb, mock_context, tmp_path):
     src_dir.mkdir()
     (src_dir / "file1.txt").write_text("content1")
     (src_dir / "file2.txt").write_text("content2")
-    
+
     dst_dir = tmp_path / "dest"
-    
+
     step = StepConfig(op=OperationType.SYNCDIR, src=str(src_dir), dst=str(dst_dir))
     mock_context.get_src_path = Mock(return_value=src_dir)
     mock_context.get_dst_path = Mock(return_value=dst_dir)
-    
+
     result = syncdir_verb.dry_run(step, mock_context)
-    
+
     assert result.success
     assert "Would sync 2 files" in result.message
     assert result.dry_run
@@ -88,19 +88,19 @@ def test_syncdir_dry_run_size_limit(syncdir_verb, mock_context, tmp_path):
     # Create source directory with large file
     src_dir = tmp_path / "source"
     src_dir.mkdir()
-    
+
     # Create a mock large file
     large_file = src_dir / "large.bin"
     large_file.write_bytes(b"x" * (101 * 1024 * 1024))  # 101MB
-    
+
     dst_dir = tmp_path / "dest"
-    
+
     step = StepConfig(op=OperationType.SYNCDIR, src=str(src_dir), dst=str(dst_dir))
     mock_context.get_src_path = Mock(return_value=src_dir)
     mock_context.get_dst_path = Mock(return_value=dst_dir)
-    
+
     result = syncdir_verb.dry_run(step, mock_context)
-    
+
     assert not result.success
     assert "exceeds limit" in result.message
 
@@ -113,20 +113,20 @@ def test_syncdir_apply_success(syncdir_verb, mock_context, tmp_path):
     (src_dir / "file1.txt").write_text("content1")
     (src_dir / "subdir").mkdir()
     (src_dir / "subdir" / "file2.txt").write_text("content2")
-    
+
     dst_dir = tmp_path / "dest"
-    
+
     step = StepConfig(op=OperationType.SYNCDIR, src=str(src_dir), dst=str(dst_dir))
     mock_context.get_src_path = Mock(return_value=src_dir)
     mock_context.get_dst_path = Mock(return_value=dst_dir)
-    
+
     result = syncdir_verb.apply(step, mock_context)
-    
+
     assert result.success
     assert "Synced 2 files" in result.message
     assert not result.dry_run
     assert result.rollback_data is not None
-    
+
     # Verify files were copied
     assert (dst_dir / "file1.txt").exists()
     assert (dst_dir / "file1.txt").read_text() == "content1"
@@ -142,23 +142,20 @@ def test_syncdir_apply_with_exclude(syncdir_verb, mock_context, tmp_path):
     (src_dir / "file1.txt").write_text("content1")
     (src_dir / "file2.log").write_text("log content")
     (src_dir / "file3.txt").write_text("content3")
-    
+
     dst_dir = tmp_path / "dest"
-    
+
     step = StepConfig(
-        op=OperationType.SYNCDIR, 
-        src=str(src_dir), 
-        dst=str(dst_dir),
-        exclude=["*.log"]
+        op=OperationType.SYNCDIR, src=str(src_dir), dst=str(dst_dir), exclude=["*.log"]
     )
     mock_context.get_src_path = Mock(return_value=src_dir)
     mock_context.get_dst_path = Mock(return_value=dst_dir)
-    
+
     result = syncdir_verb.apply(step, mock_context)
-    
+
     assert result.success
     assert "Synced 2 files" in result.message
-    
+
     # Verify .log file was excluded
     assert (dst_dir / "file1.txt").exists()
     assert (dst_dir / "file3.txt").exists()
@@ -174,16 +171,13 @@ def test_syncdir_rollback(syncdir_verb, mock_context, tmp_path):
     file1.write_text("content")
     file2 = dst_dir / "file2.txt"
     file2.write_text("content")
-    
+
     step = StepConfig(op=OperationType.SYNCDIR, src="source", dst=str(dst_dir))
-    
-    rollback_data = {
-        "created_files": [str(file1), str(file2)],
-        "dst_path": str(dst_dir)
-    }
-    
+
+    rollback_data = {"created_files": [str(file1), str(file2)], "dst_path": str(dst_dir)}
+
     success = syncdir_verb.rollback(step, mock_context, rollback_data)
-    
+
     assert success
     assert not file1.exists()
     assert not file2.exists()

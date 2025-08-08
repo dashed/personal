@@ -14,4 +14,5 @@ import sys
 if "pytest" in sys.modules and not os.environ.get("ALLOW_INTEGRATION_TESTS"):
     # Skip this entire module during pytest collection
     import pytest
+
     pytest.skip("Integration tests must run in Docker only", allow_module_level=True)

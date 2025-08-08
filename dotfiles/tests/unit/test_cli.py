@@ -55,7 +55,7 @@ def test_validate_command_invalid_config(runner, tmp_path):
     # Create an invalid config (missing required sections)
     invalid_config = tmp_path / "invalid.toml"
     invalid_config.write_text("[invalid]\ntest = true")
-    
+
     result = runner.invoke(cli, ["--config", str(invalid_config), "validate"])
     assert result.exit_code == 1
     assert "validation failed" in result.output.lower()
@@ -80,7 +80,7 @@ version = "1.0.0"
 [safety]
 dry_run_default = true
 """)
-    
+
     result = runner.invoke(cli, ["--config", str(config), "status"])
     assert result.exit_code == 0
     assert "System Status" in result.output
@@ -119,9 +119,13 @@ def test_cli_apply_flag(runner, test_config_path):
 def test_cli_log_level(runner, test_config_path):
     """Test different log levels."""
     # Test with DEBUG level
-    result = runner.invoke(cli, ["--log-level", "DEBUG", "--config", str(test_config_path), "validate"])
+    result = runner.invoke(
+        cli, ["--log-level", "DEBUG", "--config", str(test_config_path), "validate"]
+    )
     assert result.exit_code == 0
-    
-    # Test with ERROR level  
-    result = runner.invoke(cli, ["--log-level", "ERROR", "--config", str(test_config_path), "validate"])
+
+    # Test with ERROR level
+    result = runner.invoke(
+        cli, ["--log-level", "ERROR", "--config", str(test_config_path), "validate"]
+    )
     assert result.exit_code == 0
