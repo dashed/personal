@@ -33,6 +33,7 @@ def main():
     from docker_test_e2e_user_journeys import main as test_e2e_journeys
     from docker_test_core_operations import main as test_core_operations
     from docker_test_cli_commands import main as test_cli_commands
+    from docker_test_safety_features import main as test_safety_features
 
     # Track results
     all_passed = True
@@ -97,6 +98,18 @@ def main():
         print(f"Error running CLI commands tests: {e}")
         all_passed = False
         results.append(("CLI Commands Tests", False))
+
+    # Run safety features tests
+    print("\nRunning safety features tests...")
+    try:
+        exit_code = test_safety_features()
+        if exit_code != 0:
+            all_passed = False
+        results.append(("Safety Features Tests", exit_code == 0))
+    except Exception as e:
+        print(f"Error running safety features tests: {e}")
+        all_passed = False
+        results.append(("Safety Features Tests", False))
 
     # Add more integration test suites here as needed
     # from docker_test_phase3 import main as test_phase3
