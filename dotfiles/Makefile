@@ -54,6 +54,7 @@ help:
 	@echo "  make docker-test-core      # Core operations tests"
 	@echo "  make docker-test-cli       # CLI command tests"
 	@echo "  make docker-test-database  # Database integration tests"
+	@echo "  make docker-test-phase3    # Phase 3: Enhanced user journeys"
 
 # Install production dependencies
 install:
@@ -331,6 +332,11 @@ docker-test-database:
 
 docker-test-e2e-pattern:
 	@$(MAKE) docker-test-pattern PATTERN='*e2e*'
+
+docker-test-phase3:
+	@echo "🚀 Running Phase 3: Enhanced User Journey Tests in Docker..."
+	@docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1)
+	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 -e DOTFILES_TEST_MODE=true --entrypoint python dotfiles-test /app/tests/integration/docker_test_phase3_user_journeys.py
 
 # Verify integration tests are Docker-only (will fail if not in Docker)
 verify-docker-guard:
