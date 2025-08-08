@@ -666,7 +666,6 @@ def test_transaction_atomicity():
     backup_test2 = home_dir / ".backup_test2"
     backup_test2.write_text("Pre-transaction content 2")
     
-    backup_id = None
     with transaction_manager.transaction_scope(
         variant="default",
         user="testuser",
@@ -689,7 +688,7 @@ def test_transaction_atomicity():
         
         # Check if backup was created (would be in transaction manager's context)
         if tx_id in transaction_manager._active_transactions:
-            backup_id = transaction_manager._active_transactions[tx_id].backup_id
+            _ = transaction_manager._active_transactions[tx_id].backup_id
     
     # Verify backup was created
     # Note: BackupManager might not create backups in test mode, so we check if any exist
@@ -785,7 +784,6 @@ def test_transaction_atomicity():
     print("Test 8: Testing partial failure handling...")
     
     partial_test1 = home_dir / ".partial1"
-    partial_test2 = home_dir / ".partial2"
     partial_test1.write_text("Original 1")
     
     with transaction_manager.transaction_scope(
@@ -821,22 +819,23 @@ def test_transaction_atomicity():
     
     # Verify transaction completed despite partial failure
     # We don't have get_transaction, so check if it's not in failed list
-    failed_txs = db.get_failed_transactions(limit=10)
+    _ = db.get_failed_transactions(limit=10)
     # Note: partial success might still complete the transaction
-    ops = []  # We can't get operations directly from StateDatabase
+    # We can't get operations directly from StateDatabase
     # Since we can't query operations directly, we just verify the transaction completed
     # The transaction manager should have handled the partial failure
-    print(f"✓ Partial failure handled (transaction completed with mixed results)")
+    print("✓ Partial failure handled (transaction completed with mixed results)")
     
     # Test 9: Transaction metadata
     print("Test 9: Testing transaction metadata...")
     
-    metadata = {
-        "user": "test_user",
-        "host": "test_host",
-        "reason": "Testing metadata",
-        "tags": ["test", "integration"]
-    }
+    # Metadata would be used when creating transactions
+    # metadata = {
+    #     "user": "test_user",
+    #     "host": "test_host",
+    #     "reason": "Testing metadata",
+    #     "tags": ["test", "integration"]
+    # }
     
     with transaction_manager.transaction_scope(
         variant="default",
