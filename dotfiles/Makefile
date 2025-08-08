@@ -37,6 +37,7 @@ help:
 	@echo "  make docker-test       Run tests with detailed statistics"
 	@echo "  make docker-test-quick Run tests with summary only"
 	@echo "  make docker-test-all   Run tests on all platforms"
+	@echo "  make docker-test-e2e   Run end-to-end user journey tests"
 	@echo "  make test-ubuntu       Test on Ubuntu container"
 	@echo "  make docker-clean      Clean up Docker resources"
 
@@ -239,14 +240,26 @@ docker-test-new-verbs:
 		echo "Test results saved to test-results/"; \
 	fi
 
+# Run E2E User Journey tests in Docker
+docker-test-e2e:
+	@echo "🎯 Running End-to-End User Journey Tests in Docker..."
+	@docker build -t dotfiles-e2e-test -f Dockerfile.test .
+	@docker run --rm -v $(PWD):/app -e DOTFILES_TEST_MODE=true dotfiles-e2e-test python /app/tests/integration/docker_test_e2e_user_journeys.py
+
+# Run E2E tests with verbose output
+docker-test-e2e-verbose:
+	@echo "🎯 Running E2E Tests (Verbose)..."
+	@docker build -t dotfiles-e2e-test -f Dockerfile.test .
+	@docker run --rm -it -v $(PWD):/app -e DOTFILES_TEST_MODE=true dotfiles-e2e-test python /app/tests/integration/docker_test_e2e_user_journeys.py
+
 # Run ALL integration tests in Docker (safe) - main command
 docker-integration-tests:
 	@echo "🐳 Running ALL integration tests in Docker (safe environment)..."
 	@docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1)
 	@echo "Running unit tests in Docker..."
 	@docker run --rm -v $(PWD):/app --entrypoint sh dotfiles-test -c "cd /app && uv run pytest tests/unit -q"
-	@echo "Running integration tests in Docker..."
-	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 --entrypoint python dotfiles-test /app/tests/integration/run_integration_tests.py || (echo "❌ Integration tests failed" && exit 1)
+	@echo "Running ALL integration tests in Docker..."
+	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 -e DOTFILES_TEST_MODE=true --entrypoint python dotfiles-test /app/tests/integration/run_integration_tests.py || (echo "❌ Integration tests failed" && exit 1)
 	@echo "✅ All tests passed in Docker!"
 
 # Alias for backward compatibility

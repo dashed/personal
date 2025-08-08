@@ -28,6 +28,7 @@ def main():
     # They will check Docker environment again for extra safety
     from docker_test_new_verbs import main as test_new_verbs
     from docker_test_database_methods import main as test_database_methods
+    from docker_test_e2e_user_journeys import main as test_e2e_journeys
     
     # Track results
     all_passed = True
@@ -56,6 +57,18 @@ def main():
         print(f"Error running database methods tests: {e}")
         all_passed = False
         results.append(("Database Methods Tests", False))
+    
+    # Run E2E user journey tests
+    print("\nRunning E2E user journey tests...")
+    try:
+        exit_code = test_e2e_journeys()
+        if exit_code != 0:
+            all_passed = False
+        results.append(("E2E User Journey Tests", exit_code == 0))
+    except Exception as e:
+        print(f"Error running E2E tests: {e}")
+        all_passed = False
+        results.append(("E2E User Journey Tests", False))
     
     # Add more integration test suites here as needed
     # from docker_test_phase3 import main as test_phase3
