@@ -6,8 +6,11 @@ This package provides comprehensive safety and security features including:
 - Path validation and permission checking
 - Enhanced transaction handling
 - Drift detection and reporting
+- Impact analysis and confirmation prompts (Phase 4)
+- Conflict resolution and selective operations (Phase 4)
 
 Phase 2: Safety Layer implementation.
+Phase 4: Safety Features & Confirmation implementation.
 """
 
 from .backup import BackupManager, BackupManifest, BackupError
@@ -28,6 +31,31 @@ from .transaction import (
     TransactionRollbackError,
 )
 from .drift import DriftDetector, DriftMonitor, DriftResult, DriftReport, DriftType, DriftSeverity
+
+# Phase 4: Safety Features & Confirmation
+from .impact import (
+    ImpactAnalyzer,
+    DependencyAnalyzer,
+    ImpactReport,
+    ImpactDetail,
+    ImpactLevel,
+    ImpactType,
+)
+from .confirmation import (
+    ConfirmationPrompt,
+    SafetyConfirmationManager,
+    ConfirmationMode,
+    ConfirmationChoice,
+    ConfirmationResult,
+)
+from .resolver import (
+    ConflictResolver,
+    SelectiveOperationFilter,
+    ConflictReport,
+    ConflictDetail,
+    ConflictType,
+    ResolutionStrategy,
+)
 
 __all__ = [
     # Backup components
@@ -55,4 +83,24 @@ __all__ = [
     "DriftReport",
     "DriftType",
     "DriftSeverity",
+    # Phase 4: Impact analysis components
+    "ImpactAnalyzer",
+    "DependencyAnalyzer",
+    "ImpactReport",
+    "ImpactDetail", 
+    "ImpactLevel",
+    "ImpactType",
+    # Phase 4: Confirmation components
+    "ConfirmationPrompt",
+    "SafetyConfirmationManager",
+    "ConfirmationMode",
+    "ConfirmationChoice",
+    "ConfirmationResult",
+    # Phase 4: Conflict resolution components
+    "ConflictResolver",
+    "SelectiveOperationFilter",
+    "ConflictReport",
+    "ConflictDetail",
+    "ConflictType",
+    "ResolutionStrategy",
 ]
