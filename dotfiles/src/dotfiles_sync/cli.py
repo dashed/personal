@@ -185,7 +185,7 @@ def status(ctx: ExecutionContext) -> None:
 )
 def rollback(ctx: ExecutionContext, rollback_to: Optional[str], file: Optional[str]) -> None:
     """Rollback to a previous state or specific transaction.
-    
+
     Use --rollback-to to rollback an entire transaction.
     Use --file to restore a specific file from its managed source.
     """
@@ -195,16 +195,18 @@ def rollback(ctx: ExecutionContext, rollback_to: Optional[str], file: Optional[s
         # File-specific rollback - restore from managed source
         try:
             from pathlib import Path
-            
+
             file_path = Path(file).expanduser().resolve()
             console.print(f"[yellow]Restoring file from managed source:[/yellow] {file_path}")
-            
+
             with StateDatabase() as db:
                 # Find the applied step for this file
                 applied_step = db.find_applied_step_by_path(str(file_path))
                 if not applied_step:
                     # Debug: Check what paths are actually in the database
-                    cursor = db.conn.execute("SELECT dst_path, is_current FROM applied_steps ORDER BY dst_path")
+                    cursor = db.conn.execute(
+                        "SELECT dst_path, is_current FROM applied_steps ORDER BY dst_path"
+                    )
                     all_paths = cursor.fetchall()
                     console.print(f"[red]✗[/red] File not managed by dotfiles-sync: {file}")
                     console.print(f"[yellow]Debug:[/yellow] Looking for: {str(file_path)}")
@@ -212,10 +214,10 @@ def rollback(ctx: ExecutionContext, rollback_to: Optional[str], file: Optional[s
                     for path_row in all_paths:
                         console.print(f"  - {path_row[0]} (current={path_row[1]})")
                     sys.exit(1)
-                
+
                 # Type assertion: applied_step is not None after the check above
                 assert applied_step is not None
-                
+
                 if ctx.dry_run:
                     console.print(f"[yellow]DRY RUN:[/yellow] Would restore {file_path}")
                     console.print(f"  Source: {applied_step['src_path']}")
@@ -226,51 +228,62 @@ def rollback(ctx: ExecutionContext, rollback_to: Optional[str], file: Optional[s
                     from dotfiles_sync.models import StepConfig, OperationType
                     from dotfiles_sync.context import OperationContext
                     import json
-                    
+
                     # Reconstruct the original step configuration
                     try:
-                        original_config = json.loads(applied_step['config']) if applied_step['config'] else {}
-                        
+                        original_config = (
+                            json.loads(applied_step["config"]) if applied_step["config"] else {}
+                        )
+
                         # Remove conflicting keys to avoid duplicate arguments
-                        config_to_use = {k: v for k, v in original_config.items() 
-                                        if k not in ('op', 'src', 'dst')}
-                        
+                        config_to_use = {
+                            k: v
+                            for k, v in original_config.items()
+                            if k not in ("op", "src", "dst")
+                        }
+
                         # Create StepConfig from the applied step data
                         step_config = StepConfig(
-                            op=OperationType(applied_step['operation_type']),
-                            src=applied_step['src_path'],
+                            op=OperationType(applied_step["operation_type"]),
+                            src=applied_step["src_path"],
                             dst=str(file_path),
-                            **config_to_use  # Include any additional configuration
+                            **config_to_use,  # Include any additional configuration
                         )
-                        
+
                         # Create operation context
                         op_ctx = OperationContext(
                             execution_context=ctx,
-                            operation_type=applied_step['operation_type'],
+                            operation_type=applied_step["operation_type"],
                             step_config=step_config,
                             sequence_num=1,
                         )
-                        
+
                         # Get and apply the verb
                         verb_registry = VerbRegistry()
-                        verb = verb_registry.get_verb(applied_step['operation_type'])
+                        verb = verb_registry.get_verb(applied_step["operation_type"])
                         if not verb:
-                            console.print(f"[red]✗[/red] Unknown operation type: {applied_step['operation_type']}")
+                            console.print(
+                                f"[red]✗[/red] Unknown operation type: {applied_step['operation_type']}"
+                            )
                             sys.exit(1)
-                        
+
                         # Type assertion: verb is not None after the check above
                         assert verb is not None
-                        
+
                         result = verb.apply(step_config, op_ctx)
                         if result.success:
                             console.print(f"[green]✓[/green] Successfully restored: {file_path}")
                         else:
-                            console.print(f"[red]✗[/red] Failed to restore {file_path}: {result.message}")
+                            console.print(
+                                f"[red]✗[/red] Failed to restore {file_path}: {result.message}"
+                            )
                             sys.exit(1)
                     except Exception as restore_error:
-                        console.print(f"[red]✗[/red] Failed to restore {file_path}: {restore_error}")
+                        console.print(
+                            f"[red]✗[/red] Failed to restore {file_path}: {restore_error}"
+                        )
                         sys.exit(1)
-                        
+
         except Exception as e:
             console.print(f"[red]✗[/red] File rollback failed: {e}")
             logger.exception("File rollback failed")
@@ -289,10 +302,14 @@ def rollback(ctx: ExecutionContext, rollback_to: Optional[str], file: Optional[s
         try:
             with StateDatabase() as db:
                 if ctx.dry_run:
-                    console.print(f"[yellow]DRY RUN:[/yellow] Would rollback transaction {rollback_to}")
+                    console.print(
+                        f"[yellow]DRY RUN:[/yellow] Would rollback transaction {rollback_to}"
+                    )
                     operations = db.get_rollback_operations(rollback_to)
                     for op in operations:
-                        console.print(f"  • Would rollback: {op['operation_type']} on {op['dst_path']}")
+                        console.print(
+                            f"  • Would rollback: {op['operation_type']} on {op['dst_path']}"
+                        )
                 else:
                     if not ctx.force:
                         if not click.confirm(f"Rollback transaction {rollback_to}?"):
@@ -383,33 +400,35 @@ def sync(ctx: ExecutionContext) -> None:
 @click.pass_context
 def diff(ctx: click.Context, file_path: Optional[str]) -> None:
     """Show differences between managed files and their sources.
-    
+
     If FILE_PATH is provided, shows diff for specific file.
     Otherwise shows all files with drift.
     """
     logger = logging.getLogger(__name__)
-    
+
     try:
         # Import required modules
         from .state_database import StateDatabase
         from safety.drift import DriftDetector
         from pathlib import Path
-        
+
         # Initialize database and drift detector
         with StateDatabase() as db:
             drift_detector = DriftDetector(db)
-            
+
             if file_path:
                 # Show diff for specific file
                 file_path_obj = Path(file_path).expanduser().resolve()
                 console.print(f"[bold blue]Checking drift for:[/bold blue] {file_path}")
-                
+
                 # Find the applied step for this file
                 applied_step = db.find_applied_step_by_path(str(file_path_obj))
                 if not applied_step:
-                    console.print(f"[yellow]![/yellow] File not managed by dotfiles-sync: {file_path}")
+                    console.print(
+                        f"[yellow]![/yellow] File not managed by dotfiles-sync: {file_path}"
+                    )
                     return
-                
+
                 # Check for drift
                 drift_report = drift_detector.check_specific_files([file_path_obj])
                 if drift_report.drift_results:
@@ -423,16 +442,18 @@ def diff(ctx: click.Context, file_path: Optional[str]) -> None:
                 # Show all files with drift
                 console.print("[bold blue]Checking all managed files for drift...[/bold blue]")
                 drift_report = drift_detector.check_all_managed_files()
-                
+
                 if not drift_report.drift_results:
                     console.print("[green]✓[/green] No drift detected in any managed files")
                 else:
-                    console.print(f"\n[yellow]Found {len(drift_report.drift_results)} file(s) with drift:[/yellow]")
+                    console.print(
+                        f"\n[yellow]Found {len(drift_report.drift_results)} file(s) with drift:[/yellow]"
+                    )
                     for item in drift_report.drift_results:
                         console.print(f"  [red]✗[/red] {item.file_path}: {item.drift_type.value}")
                         if item.details:
                             console.print(f"     Details: {item.details}")
-                        
+
     except Exception as e:
         console.print(f"[red]✗[/red] Diff failed: {e}")
         logger.exception("Diff failed")
@@ -451,17 +472,17 @@ def backup(ctx: click.Context) -> None:
 def backup_list(ctx: click.Context) -> None:
     """List all available backups."""
     logger = logging.getLogger(__name__)
-    
+
     try:
         from safety.backup import BackupManager
-        
+
         backup_manager = BackupManager()
         backups = backup_manager.list_backups()
-        
+
         if not backups:
             console.print("[yellow]No backups found[/yellow]")
             return
-            
+
         console.print(f"[bold blue]Found {len(backups)} backup(s):[/bold blue]")
         for backup_manifest in backups:
             created_at = backup_manifest.created_at.strftime("%Y-%m-%d %H:%M:%S")
@@ -472,7 +493,7 @@ def backup_list(ctx: click.Context) -> None:
             if backup_manifest.created_by_transaction:
                 console.print(f"    Transaction: {backup_manifest.created_by_transaction}")
             console.print()
-            
+
     except Exception as e:
         console.print(f"[red]✗[/red] Failed to list backups: {e}")
         logger.exception("Backup list failed")
@@ -485,21 +506,21 @@ def backup_list(ctx: click.Context) -> None:
 def backup_restore(ctx: click.Context, backup_id: str) -> None:
     """Restore files from a specific backup."""
     logger = logging.getLogger(__name__)
-    
+
     try:
         from safety.backup import BackupManager
-        
+
         backup_manager = BackupManager()
-        
+
         console.print(f"[yellow]Restoring from backup:[/yellow] {backup_id}")
         success = backup_manager.restore_backup(backup_id)
-        
+
         if success:
             console.print(f"[green]✓[/green] Successfully restored from backup: {backup_id}")
         else:
             console.print(f"[red]✗[/red] Failed to restore from backup: {backup_id}")
             sys.exit(1)
-            
+
     except Exception as e:
         console.print(f"[red]✗[/red] Backup restore failed: {e}")
         logger.exception("Backup restore failed")

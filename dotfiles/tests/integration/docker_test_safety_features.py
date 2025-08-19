@@ -58,7 +58,7 @@ These tests are designed to be destructive and CANNOT be run outside of Docker.
 def setup_test_environment() -> Tuple[Path, Path, Path, Path]:
     """
     Set up the test environment.
-    
+
     Returns:
         Tuple of (test_dir, home_dir, source_dir, backup_dir)
     """
@@ -67,36 +67,36 @@ def setup_test_environment() -> Tuple[Path, Path, Path, Path]:
     if test_dir.exists():
         shutil.rmtree(test_dir)
     test_dir.mkdir(exist_ok=True)
-    
+
     home_dir = Path("/tmp/test_home_safety")
     if home_dir.exists():
         shutil.rmtree(home_dir)
     home_dir.mkdir(exist_ok=True)
-    
+
     source_dir = test_dir / "source"
     source_dir.mkdir(exist_ok=True)
-    
+
     backup_dir = test_dir / "backups"
     backup_dir.mkdir(exist_ok=True)
-    
+
     # Set HOME to test directory
     os.environ["HOME"] = str(home_dir)
-    
+
     # Create state directory for database
     state_dir = home_dir / ".local" / "state" / "dotfiles"
     state_dir.mkdir(parents=True, exist_ok=True)
-    
+
     return test_dir, home_dir, source_dir, backup_dir
 
 
 def create_test_config(test_dir: Path, content: str = None) -> Path:
     """
     Create a test configuration file.
-    
+
     Args:
         test_dir: Test directory
         content: Configuration content (optional)
-        
+
     Returns:
         Path to configuration file
     """
@@ -133,7 +133,7 @@ src = "source/file2"
 dst = "~/.file2"
 description = "Test file 2"
 """
-    
+
     config_path = test_dir / "dotfiles.toml"
     config_path.write_text(content)
     return config_path
@@ -142,7 +142,7 @@ description = "Test file 2"
 def test_backup_creation_and_restoration():
     """
     Test complete backup lifecycle.
-    
+
     Tests:
     - Automatic backup before modification
     - Manual backup creation
@@ -152,175 +152,174 @@ def test_backup_creation_and_restoration():
     - Cleanup old backups
     """
     print("\n=== Testing Backup Creation and Restoration ===")
-    
+
     test_dir, home_dir, source_dir, backup_dir = setup_test_environment()
-    
+
     # Test 1: Create BackupManager
     print("Test 1: Initialize BackupManager...")
-    
+
     # Create SafetyConfig for retention
     safety_config = SafetyConfig.model_construct(backup_retention_days=7)
     backup_manager = BackupManager(backup_root=backup_dir, safety_config=safety_config)
     assert backup_manager.backup_root == backup_dir, "Backup directory should be set"
     print("✓ BackupManager initialized")
-    
+
     # Test 2: Create test files to backup
     print("Test 2: Creating test files...")
-    
+
     # Create some files in home directory
     test_file1 = home_dir / ".bashrc"
     test_file1.write_text("# Original bashrc\nalias ll='ls -la'\n")
-    
+
     test_file2 = home_dir / ".vimrc"
     test_file2.write_text('" Original vimrc\nset number\n')
-    
+
     test_dir_path = home_dir / ".config"
     test_dir_path.mkdir(exist_ok=True)
     test_file3 = test_dir_path / "test.conf"
     test_file3.write_text("# Config file\nsetting=value\n")
-    
+
     print("✓ Test files created")
-    
+
     # Test 3: Create a backup
     print("Test 3: Creating backup...")
-    
+
     files_to_backup = [test_file1, test_file2, test_file3]
     backup_id = backup_manager.create_backup(
-        files_to_backup=files_to_backup,
-        reason="test_backup",
-        transaction_id="test_tx"
+        files_to_backup=files_to_backup, reason="test_backup", transaction_id="test_tx"
     )
-    
+
     assert backup_id is not None, "Backup ID should be returned"
     # Backup ID uses timestamp format: YYYY-MM-DD-HHMMSS
     assert len(backup_id) == 17, "Backup ID should be timestamp format"
     assert "-" in backup_id, "Backup ID should contain date separators"
     print(f"✓ Backup created with ID: {backup_id}")
-    
+
     # Test 4: Verify backup exists
     print("Test 4: Verifying backup...")
-    
+
     backup_path = backup_dir / backup_id
     assert backup_path.exists(), "Backup directory should exist"
-    
+
     manifest_path = backup_path / "manifest.json"
     assert manifest_path.exists(), "Manifest should exist"
-    
+
     # Read and verify manifest
     with open(manifest_path) as f:
         manifest = json.load(f)
-    
+
     assert manifest["backup_id"] == backup_id, "Backup ID should match"
     assert manifest["reason"] == "test_backup", "Reason should match"
     assert len(manifest["files_backed_up"]) == 3, "Should have backed up 3 files"
     assert manifest["created_by_transaction"] == "test_tx", "Transaction ID should be preserved"
     print("✓ Backup manifest verified")
-    
+
     # Test 5: Verify backed up files
     print("Test 5: Verifying backed up files...")
-    
+
     for file_info in manifest["files_backed_up"]:
         # Files are stored with safe names in the files directory
         original_path = Path(file_info["original_path"])
         backup_file_path = Path(file_info["backup_path"])
         assert backup_file_path.exists(), f"Backed up file should exist: {backup_file_path}"
-        
+
         # Verify content matches if original still exists
         if original_path.exists() and original_path.is_file():
-            assert backup_file_path.read_text() == original_path.read_text(), \
+            assert backup_file_path.read_text() == original_path.read_text(), (
                 f"Content should match for {original_path}"
-    
+            )
+
     print("✓ All backed up files verified")
-    
+
     # Test 6: Modify original files
     print("Test 6: Modifying original files...")
-    
+
     test_file1.write_text("# Modified bashrc\nalias la='ls -a'\n")
     test_file2.unlink()  # Delete this file
     test_file3.write_text("# Modified config\nsetting=new_value\n")
-    
+
     print("✓ Original files modified")
-    
+
     # Test 7: Restore from backup
     print("Test 7: Restoring from backup...")
-    
+
     success = backup_manager.restore_backup(backup_id)
-    
+
     assert success is True, "Restore should succeed"
-    
+
     # Verify restored content
-    assert test_file1.read_text() == "# Original bashrc\nalias ll='ls -la'\n", \
+    assert test_file1.read_text() == "# Original bashrc\nalias ll='ls -la'\n", (
         "File1 should be restored"
-    assert test_file2.exists() and test_file2.read_text() == '" Original vimrc\nset number\n', \
+    )
+    assert test_file2.exists() and test_file2.read_text() == '" Original vimrc\nset number\n', (
         "File2 should be restored"
-    assert test_file3.read_text() == "# Config file\nsetting=value\n", \
-        "File3 should be restored"
-    
+    )
+    assert test_file3.read_text() == "# Config file\nsetting=value\n", "File3 should be restored"
+
     print("✓ Files successfully restored from backup")
-    
+
     # Test 8: List backups
     print("Test 8: Listing backups...")
-    
+
     backups = backup_manager.list_backups()
     assert len(backups) >= 1, "Should have at least one backup"
     assert backup_id in [b.backup_id for b in backups], "Our backup should be in list"
     print(f"✓ Found {len(backups)} backup(s)")
-    
+
     # Test 9: Test retention policy
     print("Test 9: Testing retention policy...")
-    
+
     # Create an old backup (simulate by modifying timestamp)
     old_backup_id = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d-%H%M%S")
     old_backup_path = backup_dir / old_backup_id
     old_backup_path.mkdir(parents=True, exist_ok=True)
-    
+
     # Create a manifest with old timestamp - use correct structure
     old_manifest = {
         "backup_id": old_backup_id,
         "created_at": (datetime.now() - timedelta(days=10)).isoformat(),
         "reason": "old_backup",
         "files_backed_up": [],
-        "total_size_bytes": 0
+        "total_size_bytes": 0,
     }
     old_manifest_path = old_backup_path / "manifest.json"
     with open(old_manifest_path, "w") as f:
         json.dump(old_manifest, f)
-    
+
     # Clean old backups (retention is 7 days, this backup is 10 days old)
     cleaned = backup_manager.cleanup_expired_backups()
     assert cleaned > 0, "Should have cleaned at least one old backup"
     assert not old_backup_path.exists(), "Old backup should be removed"
     assert backup_path.exists(), "Recent backup should be kept"
-    
+
     print(f"✓ Cleaned {cleaned} old backup(s)")
-    
+
     # Test 10: Backup with symlinks
     print("Test 10: Testing backup with symlinks...")
-    
+
     # Create a symlink
     link_source = source_dir / "link_target"
     link_source.write_text("Link target content")
-    
+
     symlink_path = home_dir / ".test_link"
     symlink_path.symlink_to(link_source)
-    
+
     # Backup including symlink
     backup_id2 = backup_manager.create_backup(
-        files_to_backup=[symlink_path],
-        reason="symlink_backup"
+        files_to_backup=[symlink_path], reason="symlink_backup"
     )
-    
+
     # Verify symlink is preserved
     backup_path2 = backup_dir / backup_id2
     manifest_path2 = backup_path2 / "manifest.json"
     with open(manifest_path2) as f:
         manifest2 = json.load(f)
-    
+
     assert len(manifest2["files_backed_up"]) == 1, "Should have one file"
     assert manifest2["files_backed_up"][0]["is_symlink"] is True, "Should be marked as symlink"
-    
+
     print("✓ Symlink backup handled correctly")
-    
+
     print("✓ All backup and restoration tests passed")
     return True
 
@@ -328,7 +327,7 @@ def test_backup_creation_and_restoration():
 def test_path_validation():
     """
     Test path security validation.
-    
+
     Tests:
     - Whitelist enforcement
     - Blacklist enforcement
@@ -337,88 +336,90 @@ def test_path_validation():
     - System directory protection
     """
     print("\n=== Testing Path Validation ===")
-    
+
     test_dir, home_dir, source_dir, backup_dir = setup_test_environment()
-    
+
     # Test 1: Create SafetyValidator
     print("Test 1: Initialize SafetyValidator...")
-    
+
     security_config = SecurityConfig(
         whitelist_paths=["/tmp/**", str(home_dir) + "/**"],
         blacklist_paths=["/etc", "/usr", "/System", "/root"],
         enable_command_whitelist=True,
-        allowed_commands=["echo", "ls", "pwd"]  # Use allowed_commands instead of safe_commands
+        allowed_commands=["echo", "ls", "pwd"],  # Use allowed_commands instead of safe_commands
     )
-    
+
     # Create SafetyConfig
     safety_config = SafetyConfig.model_construct()
     validator = SafetyValidator(security_config=security_config, safety_config=safety_config)
     print("✓ SafetyValidator initialized")
-    
+
     # Test 2: Test whitelist validation (allowed paths)
     print("Test 2: Testing whitelist (allowed paths)...")
-    
+
     valid_paths = [
         home_dir / ".bashrc",
         home_dir / ".config" / "test.conf",
         Path("/tmp/test_file"),
-        test_dir / "some_file"
+        test_dir / "some_file",
     ]
-    
+
     for path in valid_paths:
         result = validator.path_validator.validate_destination_path(path)
         assert result.valid, f"Path should be valid: {path} - {result.message}"
-    
+
     print("✓ All whitelisted paths validated")
-    
+
     # Test 3: Test whitelist validation (blocked paths)
     print("Test 3: Testing whitelist (blocked paths)...")
-    
+
     invalid_paths = [
         Path("/usr/bin/test"),
         Path("/etc/passwd"),
         Path("/System/Library/test"),
         Path("/root/.bashrc"),
-        Path("/var/log/system.log")
+        Path("/var/log/system.log"),
     ]
-    
+
     for path in invalid_paths:
         result = validator.path_validator.validate_destination_path(path)
         assert not result.valid, f"Path should be invalid: {path}"
-        assert "not in whitelist" in result.message or "blacklisted" in result.message, \
+        assert "not in whitelist" in result.message or "blacklisted" in result.message, (
             f"Should have appropriate error message: {result.message}"
-    
+        )
+
     print("✓ Non-whitelisted paths blocked")
-    
+
     # Test 4: Test blacklist enforcement
     print("Test 4: Testing blacklist enforcement...")
-    
+
     blacklisted_paths = [
         Path("/etc/shadow"),
         Path("/usr/local/bin/test"),
         Path("/System/test"),
-        Path("/root/anything")
+        Path("/root/anything"),
     ]
-    
+
     for path in blacklisted_paths:
         result = validator.path_validator.validate_destination_path(path)
         assert not result.valid, f"Blacklisted path should be invalid: {path}"
         # The implementation actually checks against whitelist, not blacklist explicitly
         # So accept either "whitelist" or "blacklist" in message
-        assert "whitelist" in result.message.lower() or "blacklist" in result.message.lower(), \
+        assert "whitelist" in result.message.lower() or "blacklist" in result.message.lower(), (
             f"Should indicate path restriction: {result.message}"
-    
+        )
+
     print("✓ Blacklisted paths blocked")
-    
+
     # Test 5: Test path traversal prevention
     print("Test 5: Testing path traversal prevention...")
-    
+
     traversal_paths = [
         home_dir / ".." / ".." / "etc" / "passwd",
         home_dir / ".config" / ".." / ".." / ".." / "root",
-        test_dir / "../../../../../../etc/shadow"
+        test_dir / "../../../../../../etc/shadow",
     ]
-    
+
     for path in traversal_paths:
         # Resolve the path to see where it actually points
         try:
@@ -429,22 +430,22 @@ def test_path_validation():
         except Exception:
             # Path resolution might fail for non-existent paths
             pass
-    
+
     print("✓ Path traversal attempts handled")
-    
+
     # Test 6: Test symlink validation
     print("Test 6: Testing symlink validation...")
-    
+
     # Create a symlink to an allowed location
     allowed_target = home_dir / "allowed_file"
     allowed_target.write_text("Allowed content")
-    
+
     symlink1 = home_dir / ".allowed_link"
     symlink1.symlink_to(allowed_target)
-    
+
     result = validator.path_validator.validate_destination_path(symlink1)
     assert result.valid, f"Symlink to allowed location should be valid: {result.message}"
-    
+
     # Create a symlink to a restricted location (simulate)
     # Note: We can't actually create symlinks to /etc in Docker, so we test the logic
     if not Path("/etc/passwd").exists():
@@ -453,28 +454,28 @@ def test_path_validation():
     else:
         # This would be blocked by the validator
         print("  Testing restricted symlink validation logic")
-    
+
     print("✓ Symlink validation working")
-    
+
     # Test 7: Test command validation
     print("Test 7: Testing command validation...")
-    
+
     safe_commands = ["echo 'test'", "ls -la", "pwd"]
     unsafe_commands = ["rm -rf /", "curl evil.com", "sudo anything"]
-    
+
     for cmd in safe_commands:
         result = validator.command_validator.validate_command(cmd)
         assert result.valid, f"Safe command should be valid: {cmd} - {result.message}"
-    
+
     for cmd in unsafe_commands:
         result = validator.command_validator.validate_command(cmd)
         assert not result.valid, f"Unsafe command should be invalid: {cmd}"
-    
+
     print("✓ Command validation working")
-    
+
     # Test 8: Test system directory protection
     print("Test 8: Testing system directory protection...")
-    
+
     system_dirs = [
         Path("/"),
         Path("/bin"),
@@ -482,56 +483,53 @@ def test_path_validation():
         Path("/usr/bin"),
         Path("/System"),
         Path("/Library"),
-        Path("/Applications")
+        Path("/Applications"),
     ]
-    
+
     for sys_dir in system_dirs:
         # System directories should be blocked by path validation
         result = validator.path_validator.validate_destination_path(sys_dir)
         # System directories should not be allowed
         assert not result.valid, f"System directory should be blocked: {sys_dir}"
-    
+
     print("✓ System directory protection active")
-    
+
     # Test 9: Test permissions check
     print("Test 9: Testing permission checks...")
-    
+
     # Create a file with specific permissions
     test_file = home_dir / ".test_perms"
     test_file.write_text("Test content")
     test_file.chmod(0o600)  # Owner read/write only
-    
+
     from safety.validator import PermissionValidator
+
     perm_result = PermissionValidator.check_write_permission(test_file)
     assert perm_result.valid, "Should have write permission to own file"
-    
+
     # Test read-only file
     test_file.chmod(0o400)  # Owner read only
     perm_result = PermissionValidator.check_write_permission(test_file)
     # Note: In Docker as root, we might still have write access
     print(f"  Write permission to read-only file: {perm_result.valid}")
-    
+
     test_file.chmod(0o644)  # Restore normal permissions
-    
+
     print("✓ Permission checks completed")
-    
+
     # Test 10: Test validation with real paths
     print("Test 10: Testing with real file operations...")
-    
+
     # Test that home directory files are allowed
-    home_files = [
-        home_dir / ".bashrc",
-        home_dir / ".vimrc",
-        home_dir / ".gitconfig"
-    ]
-    
+    home_files = [home_dir / ".bashrc", home_dir / ".vimrc", home_dir / ".gitconfig"]
+
     for file_path in home_files:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         result = validator.path_validator.validate_destination_path(file_path)
         assert result.valid, f"Home file should be allowed: {file_path} - {result.message}"
-    
+
     print("✓ Real path validation working")
-    
+
     print("✓ All path validation tests passed")
     return True
 
@@ -539,7 +537,7 @@ def test_path_validation():
 def test_transaction_atomicity():
     """
     Test transaction all-or-nothing behavior.
-    
+
     Tests:
     - Successful multi-operation transaction
     - Failure mid-transaction with rollback
@@ -547,149 +545,127 @@ def test_transaction_atomicity():
     - Concurrent transaction prevention
     """
     print("\n=== Testing Transaction Atomicity ===")
-    
+
     test_dir, home_dir, source_dir, backup_dir = setup_test_environment()
-    
+
     # Test 1: Initialize database and TransactionManager
     print("Test 1: Initialize TransactionManager...")
-    
+
     db_path = home_dir / ".local" / "state" / "dotfiles" / "state.db"
     db = StateDatabase(db_path)
-    
+
     safety_config = SafetyConfig.model_construct(backup_before_modify=True)
     backup_manager = BackupManager(backup_root=backup_dir, safety_config=safety_config)
     transaction_manager = TransactionManager(db, backup_manager)
-    
+
     print("✓ TransactionManager initialized")
-    
+
     # Test 2: Successful transaction
     print("Test 2: Testing successful transaction...")
-    
+
     # Start transaction
     with transaction_manager.transaction_scope(
-        variant="default",
-        user="testuser",
-        hostname="testhost",
-        dry_run=False
+        variant="default", user="testuser", hostname="testhost", dry_run=False
     ) as tx_id:
         # Record operations using TransactionManager, not StateDatabase directly
         # Since we need proper transaction context, create dummy OperationResult
         from dotfiles_sync.models import OperationResult
-        
+
         op1 = OperationResult(
-            operation_id=1,
-            operation_type="copy",
-            success=True,
-            message="Test operation 1"
+            operation_id=1, operation_type="copy", success=True, message="Test operation 1"
         )
         transaction_manager.record_operation(tx_id, op1)
-        
+
         op2 = OperationResult(
-            operation_id=2,
-            operation_type="link",
-            success=True,
-            message="Test operation 2"
+            operation_id=2, operation_type="link", success=True, message="Test operation 2"
         )
         transaction_manager.record_operation(tx_id, op2)
-        
+
         # Transaction should auto-commit when exiting context
-    
+
     # Verify transaction was recorded
     # Note: StateDatabase doesn't have get_transaction method, use get_failed_transactions
     # The transaction should have been committed (not in failed list)
     failed_txs = db.get_failed_transactions(limit=10)
     # Our transaction shouldn't be in the failed list
     assert tx_id not in [tx["id"] for tx in failed_txs], "Transaction should not be failed"
-    
+
     print("✓ Successful transaction completed")
-    
+
     # Test 3: Failed transaction with rollback
     print("Test 3: Testing failed transaction with rollback...")
-    
+
     # Create some files to modify
     test_file1 = home_dir / ".test1"
     test_file1.write_text("Original content 1")
     test_file2 = home_dir / ".test2"
     test_file2.write_text("Original content 2")
-    
+
     try:
         with transaction_manager.transaction_scope(
-            variant="default",
-            user="testuser", 
-            hostname="testhost",
-            dry_run=False
+            variant="default", user="testuser", hostname="testhost", dry_run=False
         ) as tx_id:
             # First operation - modify file1
             test_file1.write_text("Modified content 1")
-            
+
             # Create operation results for transaction manager
             from dotfiles_sync.models import OperationResult
+
             op1 = OperationResult(
-                operation_id=3,
-                operation_type="copy",
-                success=True,
-                message="Modified file1"
+                operation_id=3, operation_type="copy", success=True, message="Modified file1"
             )
             transaction_manager.record_operation(tx_id, op1)
-            
+
             # Second operation - modify file2
             test_file2.write_text("Modified content 2")
             op2 = OperationResult(
-                operation_id=4,
-                operation_type="copy",
-                success=True,
-                message="Modified file2"
+                operation_id=4, operation_type="copy", success=True, message="Modified file2"
             )
             transaction_manager.record_operation(tx_id, op2)
-            
+
             # Simulate failure
             raise Exception("Simulated failure")
-            
+
     except Exception as e:
         if "Simulated failure" not in str(e):
             raise
-    
+
     # Check that transaction was marked as failed
     # Since we don't have tx_id outside the context, we can check failed transactions
     failed_txs = db.get_failed_transactions(limit=10)
     # The most recent failed transaction should be ours
     assert len(failed_txs) > 0, "Should have at least one failed transaction"
-    
+
     print("✓ Failed transaction handled correctly")
-    
+
     # Test 4: Transaction with backup
     print("Test 4: Testing transaction with automatic backup...")
-    
+
     # Create files to backup
     backup_test1 = home_dir / ".backup_test1"
     backup_test1.write_text("Pre-transaction content 1")
     backup_test2 = home_dir / ".backup_test2"
     backup_test2.write_text("Pre-transaction content 2")
-    
+
     with transaction_manager.transaction_scope(
-        variant="default",
-        user="testuser",
-        hostname="testhost",
-        dry_run=False
+        variant="default", user="testuser", hostname="testhost", dry_run=False
     ) as tx_id:
         # Modify files
         backup_test1.write_text("Transaction content 1")
         backup_test2.write_text("Transaction content 2")
-        
+
         # Create operation result for transaction manager
         from dotfiles_sync.models import OperationResult
+
         op = OperationResult(
-            operation_id=5,
-            operation_type="copy",
-            success=True,
-            message="Test backup operation"
+            operation_id=5, operation_type="copy", success=True, message="Test backup operation"
         )
         transaction_manager.record_operation(tx_id, op)
-        
+
         # Check if backup was created (would be in transaction manager's context)
         if tx_id in transaction_manager._active_transactions:
             _ = transaction_manager._active_transactions[tx_id].backup_id
-    
+
     # Verify backup was created
     # Note: BackupManager might not create backups in test mode, so we check if any exist
     backups = backup_manager.list_backups()
@@ -700,123 +676,107 @@ def test_transaction_atomicity():
         print(f"✓ Transaction with backup completed (backup_id: {latest_backup.backup_id})")
     else:
         print("✓ Transaction completed (no backup created in test mode)")
-    
+
     # Test 5: Manual rollback
     print("Test 5: Testing manual rollback...")
-    
+
     # Use a proper transaction scope and simulate a failure to test rollback
     rollback_file = home_dir / ".rollback_test"
-    
+
     try:
         with transaction_manager.transaction_scope(
-            variant="default",
-            user="testuser",
-            hostname="testhost",
-            dry_run=False
+            variant="default", user="testuser", hostname="testhost", dry_run=False
         ) as tx_id:
             # Do some operations
             rollback_file.write_text("New content")
-            
+
             # Create operation result for transaction manager
             from dotfiles_sync.models import OperationResult
+
             op = OperationResult(
                 operation_id=6,
                 operation_type="copy",
                 success=True,
-                message="Test rollback operation"
+                message="Test rollback operation",
             )
             transaction_manager.record_operation(tx_id, op)
-            
+
             # Force a failure to trigger rollback
             raise Exception("Simulated failure for rollback test")
     except Exception as e:
         if "Simulated failure" not in str(e):
             raise
-    
+
     # Verify transaction was rolled back - should be in failed transactions
     failed_txs = db.get_failed_transactions(limit=10)
     # The failed transaction should exist
     assert len(failed_txs) > 0, "Should have at least one failed/rolled back transaction"
-    
+
     print("✓ Manual rollback completed")
-    
+
     # Test 6: Transaction history
     print("Test 6: Testing transaction history...")
-    
+
     # Get recent transactions
     recent_txs = db.get_failed_transactions(limit=10)
     assert len(recent_txs) > 0, "Should have transaction history"
-    
+
     # Check transaction history
     print(f"  Found {len(recent_txs)} recent transactions")
-    
+
     print("✓ Transaction history accessible")
-    
+
     # Test 7: Concurrent transaction prevention
     print("Test 7: Testing concurrent transaction prevention...")
-    
+
     # Start first transaction
     tx1_id = transaction_manager.create_transaction(
-        variant="test",
-        user="test_user",
-        hostname="test_host",
-        dry_run=False
+        variant="test", user="test_user", hostname="test_host", dry_run=False
     )
-    
+
     # Try to start second transaction (should be allowed in our implementation)
     tx2_id = transaction_manager.create_transaction(
-        variant="test",
-        user="test_user",
-        hostname="test_host",
-        dry_run=False
+        variant="test", user="test_user", hostname="test_host", dry_run=False
     )
-    
+
     # Both should have different IDs
     assert tx1_id != tx2_id, "Transactions should have unique IDs"
-    
+
     # Complete both transactions
     transaction_manager.commit_transaction(tx1_id)
     transaction_manager.commit_transaction(tx2_id)
-    
+
     print("✓ Multiple transactions handled correctly")
-    
+
     # Test 8: Transaction with partial failure
     print("Test 8: Testing partial failure handling...")
-    
+
     partial_test1 = home_dir / ".partial1"
     partial_test1.write_text("Original 1")
-    
+
     with transaction_manager.transaction_scope(
-        variant="default",
-        user="testuser",
-        hostname="testhost",
-        dry_run=False
+        variant="default", user="testuser", hostname="testhost", dry_run=False
     ) as tx_id:
         # First operation succeeds
         partial_test1.write_text("Modified 1")
-        
+
         # Create operation results for transaction manager
         from dotfiles_sync.models import OperationResult
+
         op1 = OperationResult(
-            operation_id=7,
-            operation_type="copy",
-            success=True,
-            message="First operation succeeded"
+            operation_id=7, operation_type="copy", success=True, message="First operation succeeded"
         )
         transaction_manager.record_operation(tx_id, op1)
-        
+
         # Second operation fails
         op2 = OperationResult(
-            operation_id=8,
-            operation_type="copy",
-            success=False,
-            message="File not found"
+            operation_id=8, operation_type="copy", success=False, message="File not found"
         )
         transaction_manager.record_operation(tx_id, op2)
-        
+
         # Check if we should continue or rollback
         # In this implementation, we'll continue with partial success
-    
+
     # Verify transaction completed despite partial failure
     # We don't have get_transaction, so check if it's not in failed list
     _ = db.get_failed_transactions(limit=10)
@@ -825,10 +785,10 @@ def test_transaction_atomicity():
     # Since we can't query operations directly, we just verify the transaction completed
     # The transaction manager should have handled the partial failure
     print("✓ Partial failure handled (transaction completed with mixed results)")
-    
+
     # Test 9: Transaction metadata
     print("Test 9: Testing transaction metadata...")
-    
+
     # Metadata would be used when creating transactions
     # metadata = {
     #     "user": "test_user",
@@ -836,44 +796,42 @@ def test_transaction_atomicity():
     #     "reason": "Testing metadata",
     #     "tags": ["test", "integration"]
     # }
-    
+
     with transaction_manager.transaction_scope(
-        variant="default",
-        user="testuser",
-        hostname="testhost",
-        dry_run=False
+        variant="default", user="testuser", hostname="testhost", dry_run=False
     ) as tx_id:
         # Create operation with metadata
         from dotfiles_sync.models import OperationResult
+
         op = OperationResult(
             operation_id=9,
             operation_type="metadata_test",
             success=True,
-            message="Testing metadata storage"
+            message="Testing metadata storage",
         )
         transaction_manager.record_operation(tx_id, op)
-    
+
     # We can't directly retrieve operations, but we can verify the transaction exists
     # The metadata would be stored with the transaction
     print("✓ Transaction metadata stored and preserved")
-    
+
     # Test 10: Cleanup old transactions
     print("Test 10: Testing transaction cleanup...")
-    
+
     # Get transactions before cleanup
     all_txs = db.get_failed_transactions(limit=100)
     print(f"  Found {len(all_txs)} transactions before cleanup")
-    
+
     # Clean old transactions (this would normally clean transactions older than N days)
     # For testing, we'll just verify the method exists
-    if hasattr(db, 'cleanup_old_transactions'):
+    if hasattr(db, "cleanup_old_transactions"):
         cleaned = db.cleanup_old_transactions(days=30)
         print(f"  Cleaned {cleaned} old transactions")
     else:
         print("  Transaction cleanup method not implemented")
-    
+
     print("✓ Transaction cleanup tested")
-    
+
     print("✓ All transaction atomicity tests passed")
     return True
 
@@ -881,7 +839,7 @@ def test_transaction_atomicity():
 def test_safety_integration_with_cli():
     """
     Test safety features integrated with CLI operations.
-    
+
     Tests:
     - CLI commands trigger backups
     - Path validation in CLI operations
@@ -889,28 +847,24 @@ def test_safety_integration_with_cli():
     - Rollback through CLI
     """
     print("\n=== Testing Safety Integration with CLI ===")
-    
+
     test_dir, home_dir, source_dir, backup_dir = setup_test_environment()
     runner = CliRunner()
-    
+
     # Create test files
     source_file1 = source_dir / "config1"
     source_file1.write_text("Config 1 content")
     source_file2 = source_dir / "config2"
     source_file2.write_text("Config 2 content")
-    
+
     # Test 1: CLI sync creates backup
     print("Test 1: CLI sync creates automatic backup...")
-    
+
     config = create_test_config(test_dir)
-    
+
     # Run sync operation
-    result = runner.invoke(cli, [
-        '--config', str(config),
-        '--apply',
-        'sync'
-    ])
-    
+    result = runner.invoke(cli, ["--config", str(config), "--apply", "sync"])
+
     # Check for backup creation
     backup_dir_check = home_dir / ".local" / "state" / "dotfiles" / "backups"
     if backup_dir_check.exists():
@@ -918,14 +872,16 @@ def test_safety_integration_with_cli():
         print(f"  Found {len(backups)} backup(s) created by CLI")
     else:
         print("  No backup directory created (may be disabled in test mode)")
-    
+
     print("✓ CLI integration tested")
-    
+
     # Test 2: Path validation in CLI
     print("Test 2: Path validation blocks dangerous operations...")
-    
+
     # Create config with blacklisted path
-    dangerous_config = create_test_config(test_dir, """[package]
+    dangerous_config = create_test_config(
+        test_dir,
+        """[package]
 name = "dangerous-test"
 version = "1.0.0"
 
@@ -938,65 +894,58 @@ op = "copy"
 src = "source/config1"
 dst = "/etc/passwd"
 description = "Should be blocked"
-""")
-    
-    result = runner.invoke(cli, [
-        '--config', str(dangerous_config),
-        '--apply',
-        'sync'
-    ])
-    
+""",
+    )
+
+    result = runner.invoke(cli, ["--config", str(dangerous_config), "--apply", "sync"])
+
     # Should fail or skip the dangerous operation
-    assert "/etc/passwd" not in result.output or "failed" in result.output.lower() or \
-           "error" in result.output.lower() or "denied" in result.output.lower(), \
-        "Dangerous operation should be blocked"
-    
+    assert (
+        "/etc/passwd" not in result.output
+        or "failed" in result.output.lower()
+        or "error" in result.output.lower()
+        or "denied" in result.output.lower()
+    ), "Dangerous operation should be blocked"
+
     print("✓ Dangerous paths blocked by CLI")
-    
+
     # Test 3: Transaction in CLI operations
     print("Test 3: CLI operations wrapped in transactions...")
-    
+
     # Check database for transactions
     db_path = home_dir / ".local" / "state" / "dotfiles" / "state.db"
     if db_path.exists():
         db = StateDatabase(db_path)
         transactions = db.get_failed_transactions(limit=10)
-        
+
         if len(transactions) > 0:
             print(f"  Found {len(transactions)} transaction(s) in database")
             latest = transactions[0]
             print(f"  Latest transaction: {latest['id']} - {latest['status']}")
         else:
             print("  No transactions recorded (may be disabled in test mode)")
-    
+
     print("✓ Transaction tracking verified")
-    
+
     # Test 4: Rollback through CLI
     print("Test 4: Testing rollback through CLI...")
-    
+
     # Create files that will be modified
     existing_file = home_dir / ".existing"
     existing_file.write_text("Original content")
-    
+
     # Run sync to modify files
-    result = runner.invoke(cli, [
-        '--config', str(config),
-        '--apply',
-        'sync'
-    ])
-    
+    result = runner.invoke(cli, ["--config", str(config), "--apply", "sync"])
+
     # Try rollback command (if implemented)
-    result = runner.invoke(cli, [
-        '--config', str(config),
-        'rollback'
-    ])
-    
+    result = runner.invoke(cli, ["--config", str(config), "rollback"])
+
     # Check if rollback command exists
     if "rollback" in result.output.lower() or result.exit_code == 0:
         print("✓ Rollback command available")
     else:
         print("✓ Rollback command tested (may not be fully implemented)")
-    
+
     print("✓ All safety-CLI integration tests passed")
     return True
 
@@ -1004,7 +953,7 @@ description = "Should be blocked"
 def test_drift_detection():
     """
     Test drift detection functionality.
-    
+
     Tests:
     - Detect modified files
     - Detect missing files
@@ -1012,163 +961,167 @@ def test_drift_detection():
     - Report drift status
     """
     print("\n=== Testing Drift Detection ===")
-    
+
     test_dir, home_dir, source_dir, backup_dir = setup_test_environment()
-    
+
     # Test 1: Initialize DriftDetector
     print("Test 1: Initialize DriftDetector...")
-    
+
     db_path = home_dir / ".local" / "state" / "dotfiles" / "state.db"
     db = StateDatabase(db_path)
     detector = DriftDetector(db)
-    
+
     print("✓ DriftDetector initialized")
-    
+
     # Test 2: Setup managed files
     print("Test 2: Setting up managed files...")
-    
+
     # Create and track some files
     managed_file1 = home_dir / ".managed1"
     managed_file1.write_text("Original managed content 1")
-    
+
     managed_file2 = home_dir / ".managed2"
     managed_file2.write_text("Original managed content 2")
-    
+
     # Record these as managed files in database
     conn = db.conn
     cursor = conn.cursor()
-    
+
     # Add to applied_steps table (simulating completed operations)
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO applied_steps (
             step_hash, operation_type, 
             src_path, dst_path, config, applied_at
         ) VALUES (?, ?, ?, ?, ?, datetime('now'))
-    """, ("hash1", "copy", str(source_dir / "file1"), str(managed_file1), '{}'))
+    """,
+        ("hash1", "copy", str(source_dir / "file1"), str(managed_file1), "{}"),
+    )
     step_id1 = cursor.lastrowid
-    
-    cursor.execute("""
+
+    cursor.execute(
+        """
         INSERT INTO applied_steps (
             step_hash, operation_type,
             src_path, dst_path, config, applied_at
         ) VALUES (?, ?, ?, ?, ?, datetime('now'))
-    """, ("hash2", "copy", str(source_dir / "file2"), str(managed_file2), '{}'))
+    """,
+        ("hash2", "copy", str(source_dir / "file2"), str(managed_file2), "{}"),
+    )
     step_id2 = cursor.lastrowid
-    
+
     conn.commit()
-    
+
     print("✓ Managed files recorded")
-    
+
     # Test 3: No drift initially
     print("Test 3: Testing no drift state...")
-    
+
     drift_report = detector.check_all_managed_files()
     initial_drift_count = len(drift_report.drift_results)
-    
+
     print(f"  Initial drift items: {initial_drift_count}")
-    
+
     # Test 4: Detect modified file
     print("Test 4: Detecting modified files...")
-    
+
     # Modify a managed file
     managed_file1.write_text("Modified content - drift detected!")
-    
+
     # Check for drift - need to provide expected config
     expected_config = {
         "checksum": "original_checksum",  # This would normally be calculated
         "operation_type": "copy",
-        "src_path": str(source_dir / "file1")
+        "src_path": str(source_dir / "file1"),
     }
     drift_items = detector.check_file_drift(step_id1, managed_file1, expected_config)
     if drift_items:
-        assert drift_items[0].drift_type.value in ["modified"], \
-            "Should detect modified file"
+        assert drift_items[0].drift_type.value in ["modified"], "Should detect modified file"
         print("✓ Modified file drift detected")
     else:
         print("✓ Drift detection completed (may not detect in test mode)")
-    
+
     # Test 5: Detect missing file
     print("Test 5: Detecting missing files...")
-    
+
     # Delete a managed file
     managed_file2.unlink()
-    
+
     # Check for drift
     expected_config2 = {
         "checksum": "original_checksum2",
-        "operation_type": "copy", 
-        "src_path": str(source_dir / "file2")
+        "operation_type": "copy",
+        "src_path": str(source_dir / "file2"),
     }
     drift_items = detector.check_file_drift(step_id2, managed_file2, expected_config2)
     if drift_items:
-        assert drift_items[0].drift_type.value in ["deleted"], \
-            "Should detect missing file"
+        assert drift_items[0].drift_type.value in ["deleted"], "Should detect missing file"
         print("✓ Missing file drift detected")
     else:
         print("✓ Missing file test completed")
-    
+
     # Test 6: Check all drift
     print("Test 6: Checking all managed files for drift...")
-    
+
     all_drift_report = detector.check_all_managed_files()
     print(f"  Total drift items: {len(all_drift_report.drift_results)}")
-    
+
     for drift in all_drift_report.drift_results:
         print(f"  - {drift.file_path}: {drift.drift_type}")
-    
+
     print("✓ Complete drift check performed")
-    
+
     # Test 7: Get drift history from database
     print("Test 7: Getting drift history from database...")
-    
+
     # Note: DriftDetector doesn't have a record_drift method
     # Drift is detected but not explicitly recorded - it's computed on demand
-    
+
     # Get drift history
     history = detector.get_drift_history(days=1)
     print(f"  Drift history entries: {len(history)}")
-    
+
     print("✓ Drift history retrieval tested")
-    
+
     # Test 8: Drift reporting
     print("Test 8: Testing drift reporting...")
-    
+
     # Generate a comprehensive drift report
     report = detector.check_all_managed_files()
-    
-    assert hasattr(report, 'total_files_checked'), "Report should have total files checked"
-    assert hasattr(report, 'drift_results'), "Report should have drift results"
-    
+
+    assert hasattr(report, "total_files_checked"), "Report should have total files checked"
+    assert hasattr(report, "drift_results"), "Report should have drift results"
+
     drift_count = len(report.drift_results)
     print(f"  Drift report: {drift_count}/{report.total_files_checked} files with drift")
-    
+
     print("✓ Drift reporting functional")
-    
+
     # Test 9: Resolve drift
     print("Test 9: Testing drift resolution...")
-    
+
     # Restore original content
     managed_file1.write_text("Original managed content 1")
     managed_file2.write_text("Original managed content 2")
-    
+
     # Mark as resolved
-    if hasattr(detector, 'resolve_drift'):
+    if hasattr(detector, "resolve_drift"):
         detector.resolve_drift(str(managed_file1))
         detector.resolve_drift(str(managed_file2))
         print("✓ Drift resolution marked")
     else:
         print("✓ Drift resolution tested")
-    
+
     # Test 10: Scheduled drift checking
     print("Test 10: Testing scheduled drift checking...")
-    
+
     # This would normally be done by a scheduler
     # We'll just verify the method exists
-    if hasattr(detector, 'schedule_check'):
+    if hasattr(detector, "schedule_check"):
         print("  Scheduled checking available")
     else:
         print("  Scheduled checking not implemented")
-    
+
     print("✓ All drift detection tests passed")
     return True
 
@@ -1176,32 +1129,34 @@ def test_drift_detection():
 def test_complete_safety_workflow():
     """
     Test complete safety workflow with all components working together.
-    
+
     Tests:
     - Full operation with backup, validation, and transaction
     - Recovery from failure using safety features
     - Complete rollback scenario
     """
     print("\n=== Testing Complete Safety Workflow ===")
-    
+
     test_dir, home_dir, source_dir, backup_dir = setup_test_environment()
     runner = CliRunner()
-    
+
     print("Test: Complete safe operation workflow...")
-    
+
     # Step 1: Setup initial state
     print("Step 1: Setting up initial state...")
-    
+
     # Create source files
     source_config = source_dir / "app.conf"
     source_config.write_text("# Application config\nversion=1.0\nsetting=value")
-    
+
     source_script = source_dir / "script.sh"
     source_script.write_text("#!/bin/bash\necho 'Hello World'")
     source_script.chmod(0o755)
-    
+
     # Create config with all safety features enabled
-    safe_config = create_test_config(test_dir, """[package]
+    safe_config = create_test_config(
+        test_dir,
+        """[package]
 name = "complete-safety-test"
 version = "1.0.0"
 author = "Test <test@example.com>"
@@ -1240,78 +1195,79 @@ op = "run"
 command = "echo 'Safety test completed' > ~/.safety_test"
 description = "Create test marker"
 checksum = "optional"
-""")
-    
+""",
+    )
+
     print("✓ Initial state prepared")
-    
+
     # Step 2: Dry-run first (safety default)
     print("Step 2: Running dry-run...")
-    
-    result = runner.invoke(cli, [
-        '--config', str(safe_config),
-        'sync'  # No --apply flag, should be dry-run
-    ])
-    
+
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(safe_config),
+            "sync",  # No --apply flag, should be dry-run
+        ],
+    )
+
     # Verify nothing was actually created
-    assert not (home_dir / ".config" / "app.conf").exists(), \
-        "Dry-run should not create files"
-    assert "dry" in result.output.lower() or "would" in result.output.lower(), \
+    assert not (home_dir / ".config" / "app.conf").exists(), "Dry-run should not create files"
+    assert "dry" in result.output.lower() or "would" in result.output.lower(), (
         "Should indicate dry-run mode"
-    
+    )
+
     print("✓ Dry-run completed safely")
-    
+
     # Step 3: Apply with safety features
     print("Step 3: Applying with all safety features...")
-    
-    result = runner.invoke(cli, [
-        '--config', str(safe_config),
-        '--apply',
-        'sync'
-    ])
-    
+
+    result = runner.invoke(cli, ["--config", str(safe_config), "--apply", "sync"])
+
     # Verify operations completed
     config_file = home_dir / ".config" / "app.conf"
     script_link = home_dir / ".local" / "bin" / "script.sh"
-    
+
     if config_file.exists():
-        assert config_file.read_text() == source_config.read_text(), \
+        assert config_file.read_text() == source_config.read_text(), (
             "Config file should be copied correctly"
+        )
         print("  ✓ Config file copied")
-    
+
     if script_link.exists():
-        assert script_link.is_symlink() or script_link.exists(), \
-            "Script should be linked or copied"
+        assert script_link.is_symlink() or script_link.exists(), "Script should be linked or copied"
         print("  ✓ Script linked/copied")
-    
+
     print("✓ Operations completed with safety")
-    
+
     # Step 4: Simulate failure and recovery
     print("Step 4: Simulating failure and recovery...")
-    
+
     # Corrupt a file
     if config_file.exists():
         config_file.write_text("CORRUPTED DATA")
-    
+
     # Check for drift/corruption
     db_path = home_dir / ".local" / "state" / "dotfiles" / "state.db"
     if db_path.exists():
         db = StateDatabase(db_path)
         detector = DriftDetector(db)
-        
+
         # Need applied_step_id and expected_config for drift detection
         # This is a simplified example - would normally get from database
         expected_config = {"operation_type": "copy", "checksum": "dummy"}
         drift = detector.check_file_drift(1, config_file, expected_config)
         if drift:
             print(f"  ✓ Drift detected: {drift[0].drift_type.value}")
-    
+
     # Restore from backup if available
     backup_base = home_dir / ".local" / "state" / "dotfiles" / "backups"
     if backup_base.exists():
         backups = list(backup_base.iterdir())
         if backups:
             print(f"  ✓ Found {len(backups)} backup(s) for recovery")
-            
+
             # Would restore here in real scenario
             safety_config = SafetyConfig.model_construct(backup_before_modify=True)
             backup_manager = BackupManager(backup_root=backup_base, safety_config=safety_config)
@@ -1319,18 +1275,15 @@ checksum = "optional"
             if available:
                 latest_backup = available[0]["backup_id"]
                 print(f"  ✓ Could restore from backup: {latest_backup}")
-    
+
     print("✓ Failure recovery tested")
-    
+
     # Step 5: Test rollback
     print("Step 5: Testing rollback capability...")
-    
+
     # Try to rollback last transaction
-    result = runner.invoke(cli, [
-        '--config', str(safe_config),
-        'rollback'
-    ])
-    
+    result = runner.invoke(cli, ["--config", str(safe_config), "rollback"])
+
     # Check result
     if "rollback" in result.output.lower():
         print("  ✓ Rollback command executed")
@@ -1338,22 +1291,22 @@ checksum = "optional"
         print("  ✓ Rollback command available (no transactions to rollback)")
     else:
         print("  ✓ Rollback tested")
-    
+
     # Step 6: Verify safety features worked
     print("Step 6: Verifying safety features...")
-    
+
     safety_verified = []
-    
+
     # Check for backups
     if backup_base.exists() and list(backup_base.iterdir()):
         safety_verified.append("Automatic backups")
-    
+
     # Check for transaction tracking
     if db_path.exists():
         db = StateDatabase(db_path)
         if db.get_failed_transactions(limit=1):
             safety_verified.append("Transaction tracking")
-    
+
     # Check for path validation (blacklisted paths weren't created)
     # Use try/except for /root since we may not have permission to check it
     try:
@@ -1365,9 +1318,9 @@ checksum = "optional"
         # If we can't check /root, just check /etc
         if not Path("/etc/test").exists():
             safety_verified.append("Path validation")
-    
+
     print(f"  ✓ Safety features verified: {', '.join(safety_verified)}")
-    
+
     print("✓ Complete safety workflow tested successfully")
     return True
 
@@ -1380,7 +1333,7 @@ def main():
     print("\nTesting backup/restore, path validation, and transactions.")
     print("These tests ensure safety mechanisms protect against data loss.")
     print("-" * 60)
-    
+
     tests = [
         ("Backup Creation and Restoration", test_backup_creation_and_restoration),
         ("Path Validation", test_path_validation),
@@ -1389,10 +1342,10 @@ def main():
         ("Drift Detection", test_drift_detection),
         ("Complete Safety Workflow", test_complete_safety_workflow),
     ]
-    
+
     passed = 0
     failed = 0
-    
+
     for test_name, test_func in tests:
         try:
             print(f"\nRunning: {test_name}")
@@ -1410,8 +1363,9 @@ def main():
             failed += 1
             print(f"❌ {test_name} FAILED with exception: {e}")
             import traceback
+
             traceback.print_exc()
-    
+
     # Summary
     print("\n" + "=" * 60)
     print("SAFETY FEATURES TEST SUMMARY")
@@ -1419,15 +1373,15 @@ def main():
     print(f"✅ Passed: {passed}")
     print(f"❌ Failed: {failed}")
     print(f"📊 Total:  {passed + failed}")
-    
+
     if failed == 0:
         print("\n🎉 All safety feature tests passed!")
         print("Backup, validation, and transaction systems are working correctly.")
     else:
         print(f"\n⚠️  {failed} test(s) failed")
-    
+
     print("=" * 60)
-    
+
     return 0 if failed == 0 else 1
 
 

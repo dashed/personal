@@ -126,12 +126,12 @@ syntax on
 alias projects='cd ~/personal/projects'
 alias blog='cd ~/personal/blog'
 """)
-        
+
         (dotfiles_dir / "work_config").write_text("""# Work configuration
 export COMPANY_API_KEY="test-key"
 export WORK_ENV="development"
 """)
-        
+
         (dotfiles_dir / "work_aliases").write_text("""# Work aliases
 alias deploy='./scripts/deploy.sh'
 alias vpn='connect-company-vpn'

@@ -12,7 +12,7 @@ import uuid
 import platform
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Optional, Dict, List, Any, Tuple, Iterator, Union
+from typing import Optional, Dict, List, Any, Tuple, Iterator, Union, Set
 from contextlib import contextmanager
 import logging
 
@@ -731,6 +731,200 @@ class StateDatabase:
         )
 
         return cursor.rowcount
+
+    # ============================================================================
+    # CONFIGURATION DRIFT DETECTION METHODS
+    # ============================================================================
+
+    def get_applied_step_hashes_by_variant(
+        self, variant: Optional[str] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Get all applied step hashes, optionally filtered by variant.
+
+        Args:
+            variant: Optional variant to filter by (currently unused but for future use)
+
+        Returns:
+            Dict mapping dst_path to step information including hash
+        """
+        cursor = self.conn.execute(
+            """
+            SELECT 
+                dst_path,
+                step_hash,
+                operation_type,
+                config,
+                applied_at,
+                applied_by_transaction
+            FROM applied_steps
+            WHERE is_current = 1
+            ORDER BY dst_path
+        """
+        )
+
+        result = {}
+        for row in cursor.fetchall():
+            if row["dst_path"]:
+                result[row["dst_path"]] = dict(row)
+        return result
+
+    def find_orphaned_operations(self, current_step_hashes: Set[str]) -> List[Dict[str, Any]]:
+        """
+        Find applied operations not represented in current config.
+
+        Args:
+            current_step_hashes: Set of step hashes from current configuration
+
+        Returns:
+            List of orphaned operation records
+        """
+        if not current_step_hashes:
+            # If no current hashes, all applied steps are orphaned
+            cursor = self.conn.execute(
+                """
+                SELECT * FROM applied_steps
+                WHERE is_current = 1
+                ORDER BY dst_path
+            """
+            )
+        else:
+            # Find steps not in current hashes
+            placeholders = ",".join(["?"] * len(current_step_hashes))
+            cursor = self.conn.execute(
+                f"""
+                SELECT * FROM applied_steps
+                WHERE is_current = 1
+                AND step_hash NOT IN ({placeholders})
+                ORDER BY dst_path
+            """,
+                list(current_step_hashes),
+            )
+
+        return [dict(row) for row in cursor.fetchall()]
+
+    def mark_operations_as_orphaned(self, step_hashes: List[str], transaction_id: str) -> int:
+        """
+        Mark operations as orphaned (is_current = 0).
+
+        Args:
+            step_hashes: List of step hashes to mark as orphaned
+            transaction_id: Transaction ID for audit trail
+
+        Returns:
+            Number of operations marked as orphaned
+        """
+        if not step_hashes:
+            return 0
+
+        placeholders = ",".join(["?"] * len(step_hashes))
+        cursor = self.conn.execute(
+            f"""
+            UPDATE applied_steps
+            SET is_current = 0
+            WHERE step_hash IN ({placeholders})
+            AND is_current = 1
+        """,
+            step_hashes,
+        )
+
+        affected = cursor.rowcount
+
+        # Audit the operation
+        if affected > 0:
+            self.audit_log(
+                event_type="orphan_operations",
+                message=f"Marked {affected} operations as orphaned",
+                transaction_id=transaction_id,
+                severity="info",
+            )
+
+        return affected
+
+    def remove_orphaned_operations(self, step_hashes: List[str], transaction_id: str) -> int:
+        """
+        Completely remove orphaned operations from database.
+
+        Args:
+            step_hashes: List of step hashes to remove
+            transaction_id: Transaction ID for audit trail
+
+        Returns:
+            Number of operations removed
+        """
+        if not step_hashes:
+            return 0
+
+        placeholders = ",".join(["?"] * len(step_hashes))
+        cursor = self.conn.execute(
+            f"""
+            DELETE FROM applied_steps
+            WHERE step_hash IN ({placeholders})
+        """,
+            step_hashes,
+        )
+
+        affected = cursor.rowcount
+
+        # Audit the operation
+        if affected > 0:
+            self.audit_log(
+                event_type="remove_operations",
+                message=f"Removed {affected} orphaned operations",
+                transaction_id=transaction_id,
+                severity="warning",
+            )
+
+        return affected
+
+    def get_config_drift_summary(self, variant: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get summary of configuration drift.
+
+        Args:
+            variant: Optional variant to check (for future use)
+
+        Returns:
+            Dictionary with drift summary statistics
+        """
+        # Count total applied steps
+        cursor = self.conn.execute(
+            """
+            SELECT COUNT(*) as count FROM applied_steps
+            WHERE is_current = 1
+        """
+        )
+        total_applied = cursor.fetchone()["count"]
+
+        # Count by operation type
+        cursor = self.conn.execute(
+            """
+            SELECT operation_type, COUNT(*) as count
+            FROM applied_steps
+            WHERE is_current = 1
+            GROUP BY operation_type
+        """
+        )
+        by_type = {row["operation_type"]: row["count"] for row in cursor.fetchall()}
+
+        # Get most recent applied
+        cursor = self.conn.execute(
+            """
+            SELECT dst_path, operation_type, applied_at
+            FROM applied_steps
+            WHERE is_current = 1
+            ORDER BY applied_at DESC
+            LIMIT 5
+        """
+        )
+        recent = [dict(row) for row in cursor.fetchall()]
+
+        return {
+            "total_applied": total_applied,
+            "by_operation_type": by_type,
+            "recent_operations": recent,
+            "checked_at": datetime.now().isoformat(),
+        }
 
     def close(self) -> None:
         """Close database connection."""

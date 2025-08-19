@@ -54,6 +54,7 @@ help:
 	@echo "  make docker-test-core      # Core operations tests"
 	@echo "  make docker-test-cli       # CLI command tests"
 	@echo "  make docker-test-database  # Database integration tests"
+	@echo "  make docker-test-drift     # Configuration drift detection tests"
 	@echo "  make docker-test-phase3    # Phase 3: Enhanced user journeys"
 
 # Install production dependencies
@@ -76,6 +77,10 @@ test-v:
 test-file:
 	@read -p "Test file (e.g., test_config): " file; \
 	uv run pytest tests/unit/$$file.py -v
+
+# Run config drift unit tests
+test-drift:
+	uv run pytest tests/unit/test_config_drift.py -v --tb=short
 
 # Run linters
 lint:
@@ -337,6 +342,16 @@ docker-test-phase3:
 	@echo "🚀 Running Phase 3: Enhanced User Journey Tests in Docker..."
 	@docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1)
 	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 -e DOTFILES_TEST_MODE=true --entrypoint python dotfiles-test /app/tests/integration/docker_test_phase3_user_journeys.py
+
+# Test configuration drift detection (Phase 1)
+docker-test-drift:
+	@echo "🔍 Running Configuration Drift Detection Tests in Docker..."
+	@docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1)
+	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 -e DOTFILES_TEST_MODE=true --entrypoint python dotfiles-test /app/tests/integration/docker_test_config_drift.py
+
+# Quick shortcut for config drift tests
+docker-test-config-drift:
+	@$(MAKE) docker-test-pattern PATTERN='*config_drift*'
 
 # Verify integration tests are Docker-only (will fail if not in Docker)
 verify-docker-guard:

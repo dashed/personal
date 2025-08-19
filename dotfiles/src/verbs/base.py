@@ -204,7 +204,9 @@ class Verb(ABC):
         dst_path = ctx.get_dst_path()
         if dst_path and spec.dst:
             # Check against security whitelist/blacklist
-            security_config = ctx.execution_context.config.security if ctx.execution_context.config else None
+            security_config = (
+                ctx.execution_context.config.security if ctx.execution_context.config else None
+            )
             if security_config:
                 # Use the proper security validation with whitelist/blacklist
                 if not self._is_path_allowed(dst_path, security_config):
@@ -212,7 +214,9 @@ class Verb(ABC):
             else:
                 # Fallback to basic home directory check if no security config
                 if not str(dst_path.resolve()).startswith(str(Path.home())):
-                    errors.append(f"Destination path outside home directory not allowed: {dst_path}")
+                    errors.append(
+                        f"Destination path outside home directory not allowed: {dst_path}"
+                    )
 
         return errors
 
