@@ -1,4 +1,4 @@
-# <à Dotfiles Management System
+# Dotfiles Management System
 
 > A **safety-first**, declarative dotfiles management system that makes managing your configuration files easy, safe, and reproducible across all your machines.
 
@@ -9,32 +9,32 @@
 [![Coverage](https://img.shields.io/badge/coverage-65%25-yellow.svg)](./tests/)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](./LICENSE)
 
-[**Getting Started**](#-getting-started) " [**Quick Tutorial**](#-quick-tutorial) " [**Documentation**](#-documentation) " [**Examples**](#-real-world-examples)
+[**Getting Started**](#getting-started) | [**Quick Tutorial**](#quick-tutorial) | [**Documentation**](#documentation) | [**Examples**](#real-world-examples)
 
 </div>
 
 ---
 
-## =Ö What Are Dotfiles?
+## What Are Dotfiles?
 
 If you're new to dotfiles, don't worry! **Dotfiles** are configuration files that start with a dot (`.`) like `.bashrc`, `.gitconfig`, or `.vimrc`. They control how your programs behave and look. Managing dotfiles means:
 
 - = **Keeping settings synchronized** across multiple computers
-- =æ **Backing up** your configurations safely
-- =€ **Quickly setting up** new machines with your preferences
-- =e **Sharing** configurations with teammates or the community
+- **Backing up** your configurations safely
+- **Quickly setting up** new machines with your preferences
+- **Sharing** configurations with teammates or the community
 
 ### Why Use This System?
 
 Unlike manual copying or basic scripts, this system provides:
 
 -  **Safety First**: Automatic backups before any changes
-- = **Preview Mode**: See what will happen before it does (dry-run by default)
-- © **Rollback**: Undo any operation if something goes wrong
-- =Ý **Declarative**: Describe what you want, not how to do it
-- =á **Security**: Path validation and command whitelisting
+- **Preview Mode**: See what will happen before it does (dry-run by default)
+- ï¿½ **Rollback**: Undo any operation if something goes wrong
+- **Declarative**: Describe what you want, not how to do it
+- =ï¿½ **Security**: Path validation and command whitelisting
 
-## =€ Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -79,7 +79,7 @@ pip install -e .
 dotfiles-sync --version
 ```
 
-## <¯ Quick Tutorial
+## Quick Tutorial
 
 Let's start with a simple example - managing your Git configuration.
 
@@ -141,7 +141,7 @@ Always preview what will happen first:
 uv run dotfiles-sync sync
 
 # Output:
-# = DRY RUN MODE - No changes will be made
+# DRY RUN MODE - No changes will be made
 # Would create link: ~/.gitconfig -> /path/to/dotfiles/git/gitconfig
 ```
 
@@ -155,7 +155,7 @@ uv run dotfiles-sync --apply sync
 
 # Output:
 #  Created link: ~/.gitconfig -> /path/to/dotfiles/git/gitconfig
-# =æ Backup saved to: ~/.local/state/dotfiles/backups/...
+# Backup saved to: ~/.local/state/dotfiles/backups/...
 ```
 
 ### Step 5: Check Status
@@ -166,13 +166,13 @@ See what's currently managed:
 uv run dotfiles-sync status
 
 # Output:
-# =Ê Dotfiles Status
+# Dotfiles Status
 # Managed files: 1
 # Last sync: 2025-08-10 10:30:00
 #  ~/.gitconfig -> /path/to/dotfiles/git/gitconfig
 ```
 
-## =Ú Documentation
+## Documentation
 
 ### Available Operations (Verbs)
 
@@ -596,7 +596,7 @@ dst = "~/.tmux.conf"
 description = "Tmux configuration (all machines)"
 ```
 
-## =à Advanced Usage
+## =ï¿½ Advanced Usage
 
 ### Custom Safety Settings
 
@@ -734,7 +734,7 @@ The system includes multiple safety layers:
 5. **Checksum verification** - Ensure file integrity
 6. **Transaction tracking** - Full audit trail
 
-## =Ë FAQ
+## FAQ
 
 ### Q: Is this safe to use?
 
@@ -788,7 +788,192 @@ make docker-test
 - From Chezmoi: Convert templates to `copy` operations
 - Manual: Start with your most important configs
 
-## > Contributing
+
+## Adding Files to Dotfiles Management
+
+### Step-by-Step Guide for Adding New Files
+
+#### 1. Choose Your Management Strategy
+
+Decide whether to use `link` or `copy`:
+
+| Use **link** when: | Use **copy** when: |
+|-------------------|-------------------|
+| You actively edit the file | File is stable/rarely changes |
+| Want instant synchronization | Want explicit version control |
+| Testing configurations | Need different permissions |
+| | Want independent copies |
+
+#### 2. Add File to Dotfiles Repository
+
+```bash
+# Create appropriate directory structure
+cd ~/dotfiles
+mkdir -p category  # e.g., shell, git, vim, etc.
+
+# For COPY: Copy the original file to your dotfiles
+cp ~/.config/app/config.yml category/app-config.yml
+
+# For LINK: Move the original file to your dotfiles
+mv ~/.config/app/config.yml category/app-config.yml
+```
+
+#### 3. Update dotfiles.toml
+
+Add a new `[[step]]` section:
+
+```toml
+# For COPY operation (recommended for most cases)
+[[step]]
+op = "copy"
+src = "category/app-config.yml"
+dst = "~/.config/app/config.yml"
+description = "App configuration"
+create_parent_dirs = true
+
+# For LINK operation (real-time sync)
+[[step]]
+op = "link"
+src = "category/app-config.yml"
+dst = "~/.config/app/config.yml"
+description = "App configuration"
+create_parent_dirs = true
+```
+
+#### 4. Test Your Configuration
+
+```bash
+# Preview what will happen (dry run - always safe)
+uv run dotfiles-sync sync
+
+# If everything looks good, apply the changes
+uv run dotfiles-sync --apply sync
+```
+
+#### 5. Commit Your Changes
+
+```bash
+git add category/app-config.yml dotfiles.toml
+git commit -m "Add app configuration to dotfiles"
+git push
+```
+
+### Real Example: Adding SSH Config
+
+```bash
+# 1. Create directory
+mkdir -p ssh
+
+# 2. Copy SSH config to dotfiles
+cp ~/.ssh/config ssh/config
+
+# 3. Add to dotfiles.toml
+cat >> dotfiles.toml << 'EOF'
+
+[[step]]
+op = "copy"
+src = "ssh/config"
+dst = "~/.ssh/config"
+mode = "0600"  # Important: SSH requires strict permissions
+description = "SSH client configuration"
+create_parent_dirs = true
+EOF
+
+# 4. Test
+uv run dotfiles-sync sync
+
+# 5. Apply
+uv run dotfiles-sync --apply sync
+
+# 6. Commit
+git add ssh/config dotfiles.toml
+git commit -m "Add SSH configuration"
+```
+
+### Tips for Common File Types
+
+#### Shell Configuration Files
+```toml
+[[step]]
+op = "copy"  # Use copy to avoid breaking active shells
+src = "shell/zshrc"
+dst = "~/.zshrc"
+```
+
+#### Git Configuration
+```toml
+[[step]]
+op = "copy"  # Copy allows local overrides
+src = "git/gitconfig"
+dst = "~/.gitconfig"
+```
+
+#### Editor Configurations
+```toml
+[[step]]
+op = "link"  # Link for active development
+src = "vim/vimrc"
+dst = "~/.vimrc"
+```
+
+#### SSH Files (Require Permissions)
+```toml
+[[step]]
+op = "copy"
+src = "ssh/config"
+dst = "~/.ssh/config"
+mode = "0600"  # Required for SSH files
+```
+
+#### Application Configs
+```toml
+[[step]]
+op = "copy"
+src = "apps/vscode-settings.json"
+dst = "~/Library/Application Support/Code/User/settings.json"
+platforms = ["darwin"]  # Mac only
+```
+
+### Updating Existing Managed Files
+
+#### For Copy-Managed Files:
+```bash
+# Edit your local file as needed
+vim ~/.config/app/config.yml
+
+# When ready to save to dotfiles:
+cp ~/.config/app/config.yml ~/dotfiles/category/app-config.yml
+git add category/app-config.yml
+git commit -m "Update app configuration"
+```
+
+#### For Link-Managed Files:
+```bash
+# Edit either location - they're the same file!
+vim ~/.config/app/config.yml
+# OR
+vim ~/dotfiles/category/app-config.yml
+
+# Changes are immediate, just commit when ready
+git add category/app-config.yml
+git commit -m "Update app configuration"
+```
+
+### Removing Files from Management
+
+```bash
+# 1. Remove from dotfiles.toml (delete the [[step]] section)
+
+# 2. For linked files, replace with regular file:
+rm ~/.config/app/config.yml  # Remove symlink
+cp ~/dotfiles/category/app-config.yml ~/.config/app/config.yml
+
+# 3. Optionally remove from repository:
+git rm category/app-config.yml
+git commit -m "Remove app config from dotfiles management"
+```
+
+## Contributing
 
 Contributions are welcome! Please:
 
@@ -800,17 +985,17 @@ Contributions are welcome! Please:
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
 
-## =Ä License
+## License
 
 This project is licensed under the MIT License - see [LICENSE](./LICENSE) for details.
 
-## =O Acknowledgments
+## Acknowledgments
 
 - Inspired by GNU Stow, Chezmoi, and Dotbot
 - Built with Python, Click, and Pydantic
 - Safety patterns from production deployment tools
 
-## =î Support
+## Support
 
 - **Issues**: [GitHub Issues](https://github.com/yourusername/dotfiles/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/yourusername/dotfiles/discussions)
@@ -820,7 +1005,7 @@ This project is licensed under the MIT License - see [LICENSE](./LICENSE) for de
 
 <div align="center">
 
-**Happy Dotfiles Management! <‰**
+**Happy Dotfiles Management!**
 
 Made with d by the Dotfiles Community
 

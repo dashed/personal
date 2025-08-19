@@ -1,185 +1,29 @@
-# Dotfiles Configuration - Similar to Cargo.toml structure
-# This file defines all dotfile operations in a declarative, safety-first manner
+# Minimal dotfiles configuration for managing CLAUDE.md
 
 [package]
-name = "dotfiles"
+name = "my-dotfiles"
 version = "1.0.0"
-author = "Your Name <your.email@example.com>"
+author = "User <user@example.com>"
 description = "Personal dotfiles configuration"
 
 [safety]
-# Safety-first defaults - operations are dry-run by default
-dry_run_default = true
-backup_before_modify = true
-backup_retention_days = 30
-verify_checksums = true
-fail_on_error = true
-max_operations = 1000
+dry_run_default = true         # Always preview changes first
+backup_before_modify = true    # Create backups before changes
+backup_retention_days = 30     # Keep backups for 30 days
 
 [security]
-# Paths that operations are allowed to modify
 whitelist_paths = [
-    "~/.config",
-    "~/.local",
-    "~/.zshrc",
-    "~/.bashrc",
-    "~/.gitconfig",
-    "~/.ssh/config",
+    "~/**",                    # Allow all paths in home directory
 ]
-
-# Paths that should never be touched
 blacklist_paths = [
-    "/etc",
-    "/usr",
-    "/System",
-    "~/.ssh/id_*",
-    "~/.gnupg",
+    "/etc/**",                 # Never modify system files
+    "/System/**",              # Never modify macOS system files
 ]
 
-# Secret management configuration
-secret_provider = "environment"  # or "keychain", "onepassword", "lastpass"
-
-# ============== DECLARATIVE STEPS ==============
-# Each [[step]] defines an operation, similar to [[bin]] in Cargo.toml
-
-# Shell configuration
-[[step]]
-op = "link"
-src = "shell/zshrc"
-dst = "~/.zshrc"
-variants = ["all"]
-platforms = ["macos", "linux"]
-description = "Zsh configuration"
-
-[[step]]
-op = "link"
-src = "shell/bashrc"
-dst = "~/.bashrc"
-variants = ["all"]
-platforms = ["linux"]
-description = "Bash configuration (Linux only)"
-
-# Git configuration
-[[step]]
-op = "copy"  # Copy instead of link for git config
-src = "git/gitconfig"
-dst = "~/.gitconfig"
-variants = ["all"]
-description = "Git global configuration"
-
-[[step]]
-op = "template"
-src = "git/gitconfig.work.j2"
-dst = "~/.gitconfig"
-variants = ["work"]
-vars = { email = "${WORK_EMAIL}", signing_key = "${WORK_GPG_KEY}" }
-description = "Work-specific git configuration"
-
-# SSH configuration
+# Copy CLAUDE.md configuration
 [[step]]
 op = "copy"
-src = "ssh/config"
-dst = "~/.ssh/config"
-variants = ["all"]
-mode = "0600"  # Ensure proper permissions
-description = "SSH client configuration"
-
-# Starship prompt
-[[step]]
-op = "link"
-src = "starship.toml"
-dst = "~/.config/starship.toml"
-variants = ["all"]
-description = "Starship prompt configuration"
-
-# VS Code settings (macOS)
-[[step]]
-op = "syncdir"
-src = "vscode"
-dst = "~/Library/Application Support/Code/User"
-variants = ["personal", "work"]
-platforms = ["macos"]
-exclude = ["workspaceStorage", "globalStorage"]
-description = "VS Code settings and snippets"
-
-# VS Code settings (Linux)
-[[step]]
-op = "syncdir"
-src = "vscode"
-dst = "~/.config/Code/User"
-variants = ["personal", "work"]
-platforms = ["linux"]
-exclude = ["workspaceStorage", "globalStorage"]
-description = "VS Code settings and snippets"
-
-# Package installations
-[[step]]
-op = "brew_install"
-packages = [
-    "git",
-    "gh",
-    "ripgrep",
-    "fd",
-    "bat",
-    "eza",
-    "starship",
-    "jq",
-    "yq",
-]
-variants = ["personal", "work"]
-platforms = ["macos"]
-description = "Install common Homebrew packages"
-
-[[step]]
-op = "brew_install"
-packages = [
-    "docker",
-    "kubectl",
-    "helm",
-    "terraform",
-]
-variants = ["work"]
-platforms = ["macos"]
-description = "Install work-specific tools"
-
-[[step]]
-op = "apt_install"
-packages = [
-    "git",
-    "ripgrep",
-    "fd-find",
-    "bat",
-    "jq",
-]
-variants = ["all"]
-platforms = ["linux"]
-sudo = true
-description = "Install common APT packages"
-
-# One-time setup commands
-[[step]]
-op = "run_once"
-command = "mkdir -p ~/.local/bin ~/.local/share ~/.config"
-checksum = "setup_directories_v1"
-variants = ["all"]
-description = "Create XDG directories"
-
-[[step]]
-op = "run_once"
-command = "git config --global init.defaultBranch main"
-checksum = "git_default_branch_v1"
-variants = ["all"]
-description = "Set git default branch to main"
-
-# Append to existing files
-[[step]]
-op = "append"
-text = '''
-# Added by dotfiles-sync
-export PATH="$HOME/.local/bin:$PATH"
-'''
-dst = "~/.zshenv"
-variants = ["all"]
-platforms = ["macos", "linux"]
-marker = "# dotfiles-sync-path"
-description = "Add local bin to PATH"
+src = "configs/claude/CLAUDE.md"
+dst = "~/.claude/CLAUDE.md"
+description = "Copy Claude configuration file"
+create_parent_dirs = true      # Create ~/.claude directory if needed
