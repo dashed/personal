@@ -78,9 +78,16 @@ test-file:
 	@read -p "Test file (e.g., test_config): " file; \
 	uv run pytest tests/unit/$$file.py -v
 
-# Run config drift unit tests
+# Run config drift unit tests (Phase 1)
 test-drift:
 	uv run pytest tests/unit/test_config_drift.py -v --tb=short
+
+# Run CLI drift command tests (Phase 2)
+test-cli-drift:
+	uv run pytest tests/unit/test_cli_drift.py -v --tb=short
+
+# Run all drift-related unit tests
+test-drift-all: test-drift test-cli-drift
 
 # Run linters
 lint:
@@ -337,6 +344,11 @@ docker-test-database:
 
 docker-test-e2e-pattern:
 	@$(MAKE) docker-test-pattern PATTERN='*e2e*'
+
+docker-test-phase2:
+	@echo "📊 Running Phase 2: CLI Visibility & Reporting Tests in Docker..."
+	@docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1)
+	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 -e DOTFILES_TEST_MODE=true --entrypoint python dotfiles-test /app/tests/integration/docker_test_phase2_cli_drift.py
 
 docker-test-phase3:
 	@echo "🚀 Running Phase 3: Enhanced User Journey Tests in Docker..."

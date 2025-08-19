@@ -17,6 +17,7 @@ from dotfiles_sync import __version__
 from dotfiles_sync.config import ConfigLoader, ConfigValidationError
 from dotfiles_sync.context import ExecutionContext
 from dotfiles_sync.database import StateDatabase
+from dotfiles_sync.config_drift import ConfigDriftDetector, ConfigDriftType, ConfigDriftSummary
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from verbs import OperationExecutor
@@ -32,6 +33,93 @@ def setup_logging(level: str = "INFO") -> None:
         datefmt="[%X]",
         handlers=[RichHandler(console=console, rich_tracebacks=True)],
     )
+
+
+def _display_drift_table(drift_summary: ConfigDriftSummary, detailed: bool = False) -> None:
+    """Display configuration drift in a formatted table."""
+    from rich.table import Table
+    from rich.panel import Panel
+    
+    # Create header panel
+    header_text = f"[bold]Configuration Drift Report[/bold]\n"
+    header_text += f"Variant: {drift_summary.checked_variant}\n"
+    header_text += f"Total Drift: {drift_summary.total_drift} operations"
+    
+    console.print(Panel(header_text, title="Drift Analysis", border_style="blue"))
+    
+    # Display orphaned operations
+    if drift_summary.orphaned_operations:
+        console.print("\n[bold yellow]⚠ ORPHANED OPERATIONS[/bold yellow] (in database but not in config):")
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Path", style="cyan")
+        table.add_column("Type", style="magenta")
+        table.add_column("Impact", style="yellow")
+        
+        for op in drift_summary.orphaned_operations:
+            table.add_row(op.dst_path, op.operation_type, op.impact)
+        
+        console.print(table)
+        
+        if detailed:
+            for op in drift_summary.orphaned_operations:
+                console.print(f"\n  Details for {op.dst_path}:")
+                console.print(f"    Applied config: {op.applied_config}")
+    
+    # Display modified operations
+    if drift_summary.modified_operations:
+        console.print("\n[bold blue]🔄 MODIFIED OPERATIONS[/bold blue] (configuration changed):")
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Path", style="cyan")
+        table.add_column("Type", style="magenta")
+        table.add_column("Change", style="blue")
+        
+        for op in drift_summary.modified_operations:
+            table.add_row(op.dst_path, op.operation_type, op.impact)
+        
+        console.print(table)
+        
+        if detailed:
+            for op in drift_summary.modified_operations:
+                console.print(f"\n  Details for {op.dst_path}:")
+                console.print(f"    Old config: {op.applied_config}")
+                console.print(f"    New config: {op.current_config}")
+    
+    # Display new operations
+    if drift_summary.new_operations:
+        console.print("\n[bold green]✨ NEW OPERATIONS[/bold green] (in config but not yet applied):")
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Path", style="cyan")
+        table.add_column("Type", style="magenta")
+        table.add_column("Action", style="green")
+        
+        for op in drift_summary.new_operations:
+            table.add_row(op.dst_path, op.operation_type, op.impact)
+        
+        console.print(table)
+        
+        if detailed:
+            for op in drift_summary.new_operations:
+                console.print(f"\n  Details for {op.dst_path}:")
+                console.print(f"    Config: {op.current_config}")
+    
+    # Display recommendation
+    if drift_summary.recommended_action:
+        console.print(f"\n[bold]Recommendation:[/bold] {drift_summary.recommended_action}")
+
+
+def _display_drift_summary(drift_summary: ConfigDriftSummary) -> None:
+    """Display a brief summary of configuration drift."""
+    if drift_summary.total_drift == 0:
+        console.print("[green]✓[/green] No configuration drift detected")
+    else:
+        console.print(f"[yellow]⚠[/yellow] Configuration drift detected: {drift_summary.total_drift} operations")
+        if drift_summary.orphaned_operations:
+            console.print(f"  Orphaned: {len(drift_summary.orphaned_operations)}")
+        if drift_summary.modified_operations:
+            console.print(f"  Modified: {len(drift_summary.modified_operations)}")
+        if drift_summary.new_operations:
+            console.print(f"  New: {len(drift_summary.new_operations)}")
+        console.print(f"\n  Run 'dotfiles-sync drift-check --detailed' for full report")
 
 
 @click.group(invoke_without_command=True)
@@ -110,8 +198,9 @@ def cli(
 
 
 @cli.command()
+@click.option('--check-database', is_flag=True, help='Validate against database state')
 @click.pass_obj
-def validate(ctx: ExecutionContext) -> None:
+def validate(ctx: ExecutionContext, check_database: bool) -> None:
     """Validate the configuration file without executing any operations."""
     logger = logging.getLogger(__name__)
 
@@ -125,6 +214,29 @@ def validate(ctx: ExecutionContext) -> None:
         console.print(f"  Package: {config.package.name} v{config.package.version}")
         console.print(f"  Safety: dry_run_default={config.safety.dry_run_default}")
         console.print(f"  Steps: {len(config.step)} operations defined")
+        
+        # Check against database if requested
+        if check_database:
+            console.print("\n[bold]Database Validation[/bold]")
+            with StateDatabase() as db:
+                detector = ConfigDriftDetector(db)
+                drift = detector.detect_drift(config, ctx.variant)
+                
+                has_issues = False
+                
+                if drift.orphaned_operations:
+                    console.print(f"[yellow]⚠[/yellow] {len(drift.orphaned_operations)} orphaned operations found")
+                    has_issues = True
+                
+                if drift.modified_operations:
+                    console.print(f"[yellow]⚠[/yellow] {len(drift.modified_operations)} modified operations found")
+                    has_issues = True
+                
+                if drift.new_operations:
+                    console.print(f"[blue]ℹ[/blue] {len(drift.new_operations)} new operations ready to apply")
+                
+                if not has_issues and not drift.new_operations:
+                    console.print("[green]✓[/green] Configuration matches database state")
 
     except ConfigValidationError as e:
         console.print(f"[red]✗[/red] Configuration validation failed: {e}")
@@ -135,9 +247,53 @@ def validate(ctx: ExecutionContext) -> None:
         sys.exit(1)
 
 
-@cli.command()
+@cli.command("drift-check")
+@click.option('--detailed', is_flag=True, help='Show detailed drift information')
+@click.option('--format', type=click.Choice(['table', 'json']), default='table', help='Output format')
 @click.pass_obj
-def status(ctx: ExecutionContext) -> None:
+def drift_check(ctx: ExecutionContext, detailed: bool, format: str) -> None:
+    """Check for configuration drift between TOML and database.
+    
+    This command compares the current configuration file with the applied
+    state in the database to identify:
+    - New operations that need to be applied
+    - Modified operations that have changed configuration
+    - Orphaned operations that are no longer in the configuration
+    """
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Load configuration
+        loader = ConfigLoader(ctx.config_path)
+        config = loader.load()
+        
+        # Detect drift
+        with StateDatabase() as db:
+            detector = ConfigDriftDetector(db)
+            drift_summary = detector.detect_drift(config, ctx.variant)
+        
+        # Display results
+        if format == 'json':
+            import json
+            # Use model_dump_json for proper enum serialization
+            console.print(drift_summary.model_dump_json(indent=2))
+        else:
+            _display_drift_table(drift_summary, detailed)
+        
+        # Exit with appropriate code
+        if drift_summary.total_drift > 0:
+            sys.exit(1)  # Indicate drift exists
+    
+    except Exception as e:
+        console.print(f"[red]✗[/red] Configuration drift check failed: {e}")
+        logger.exception("Drift check failed")
+        sys.exit(1)
+
+
+@cli.command()
+@click.option('--config-drift', is_flag=True, help='Show configuration drift summary')
+@click.pass_obj
+def status(ctx: ExecutionContext, config_drift: bool) -> None:
     """Show current system status and applied configurations."""
     logger = logging.getLogger(__name__)
 
@@ -164,6 +320,22 @@ def status(ctx: ExecutionContext) -> None:
                     console.print(f"  • {item['dst_path']} ({item['operation_type']})")
                 if len(current_state) > 10:
                     console.print(f"  ... and {len(current_state) - 10} more")
+            
+            # Show configuration drift if requested
+            if config_drift:
+                try:
+                    # Load config and detect drift
+                    loader = ConfigLoader(ctx.config_path)
+                    config = loader.load()
+                    
+                    detector = ConfigDriftDetector(db)
+                    drift = detector.detect_drift(config, ctx.variant)
+                    
+                    console.print("\n[bold]Configuration Drift[/bold]")
+                    _display_drift_summary(drift)
+                    
+                except Exception as e:
+                    console.print(f"\n[yellow]⚠[/yellow] Could not check drift: {e}")
 
     except Exception as e:
         console.print(f"[red]✗[/red] Failed to get status: {e}")
@@ -332,8 +504,9 @@ def rollback(ctx: ExecutionContext, rollback_to: Optional[str], file: Optional[s
 
 
 @cli.command()
+@click.option('--show-drift', is_flag=True, help='Show configuration drift before syncing')
 @click.pass_obj
-def sync(ctx: ExecutionContext) -> None:
+def sync(ctx: ExecutionContext, show_drift: bool) -> None:
     """Synchronize dotfiles according to configuration."""
     logger = logging.getLogger(__name__)
 
@@ -348,6 +521,21 @@ def sync(ctx: ExecutionContext) -> None:
         console.print(f"  Variant: {ctx.variant}")
         console.print(f"  Mode: {'DRY RUN' if ctx.dry_run else 'APPLY'}")
         console.print()
+        
+        # Show drift if requested
+        if show_drift:
+            console.print("[bold]Pre-sync Drift Analysis[/bold]")
+            with StateDatabase() as db:
+                detector = ConfigDriftDetector(db)
+                drift = detector.detect_drift(config, ctx.variant)
+                _display_drift_summary(drift)
+                
+                if drift.total_drift > 0 and not ctx.force:
+                    console.print()
+                    if not click.confirm("Continue with sync?"):
+                        console.print("[yellow]Sync cancelled[/yellow]")
+                        return
+            console.print()
 
         # Execute operations using the OperationExecutor
         executor = OperationExecutor()
