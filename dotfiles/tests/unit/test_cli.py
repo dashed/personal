@@ -90,7 +90,7 @@ def test_rollback_command_no_id(runner):
     """Test rollback command without transaction ID."""
     result = runner.invoke(cli, ["rollback"])
     assert result.exit_code == 1
-    assert "No transaction ID specified" in result.output
+    assert "No transaction ID or file specified" in result.output
 
 
 def test_sync_command_implemented(runner, test_config_path):

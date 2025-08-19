@@ -208,10 +208,13 @@ def rollback(ctx: ExecutionContext, rollback_to: Optional[str], file: Optional[s
                     all_paths = cursor.fetchall()
                     console.print(f"[red]✗[/red] File not managed by dotfiles-sync: {file}")
                     console.print(f"[yellow]Debug:[/yellow] Looking for: {str(file_path)}")
-                    console.print(f"[yellow]Debug:[/yellow] Available paths in DB:")
+                    console.print("[yellow]Debug:[/yellow] Available paths in DB:")
                     for path_row in all_paths:
                         console.print(f"  - {path_row[0]} (current={path_row[1]})")
                     sys.exit(1)
+                
+                # Type assertion: applied_step is not None after the check above
+                assert applied_step is not None
                 
                 if ctx.dry_run:
                     console.print(f"[yellow]DRY RUN:[/yellow] Would restore {file_path}")
@@ -254,6 +257,9 @@ def rollback(ctx: ExecutionContext, rollback_to: Optional[str], file: Optional[s
                         if not verb:
                             console.print(f"[red]✗[/red] Unknown operation type: {applied_step['operation_type']}")
                             sys.exit(1)
+                        
+                        # Type assertion: verb is not None after the check above
+                        assert verb is not None
                         
                         result = verb.apply(step_config, op_ctx)
                         if result.success:
@@ -381,7 +387,6 @@ def diff(ctx: click.Context, file_path: Optional[str]) -> None:
     If FILE_PATH is provided, shows diff for specific file.
     Otherwise shows all files with drift.
     """
-    execution_ctx: ExecutionContext = ctx.obj
     logger = logging.getLogger(__name__)
     
     try:
@@ -445,7 +450,6 @@ def backup(ctx: click.Context) -> None:
 @click.pass_context
 def backup_list(ctx: click.Context) -> None:
     """List all available backups."""
-    execution_ctx: ExecutionContext = ctx.parent.obj
     logger = logging.getLogger(__name__)
     
     try:
@@ -480,7 +484,6 @@ def backup_list(ctx: click.Context) -> None:
 @click.pass_context
 def backup_restore(ctx: click.Context, backup_id: str) -> None:
     """Restore files from a specific backup."""
-    execution_ctx: ExecutionContext = ctx.parent.obj
     logger = logging.getLogger(__name__)
     
     try:

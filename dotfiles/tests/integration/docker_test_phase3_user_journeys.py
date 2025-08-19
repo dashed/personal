@@ -9,18 +9,15 @@ backup list/restore, rollback --file) to create realistic workflows.
 SAFETY: These tests MUST run in Docker. There is NO override mechanism.
 """
 
-import os
 import sys
-import shutil
-import json
-from pathlib import Path
-from typing import Tuple, Optional
 
 # Add src to path for imports
 sys.path.insert(0, "/app/src")
 
 # CRITICAL SAFETY CHECK: Ensure we're running in Docker
 from docker_only_guard import require_docker
+# Import test helper from existing E2E tests
+from docker_test_e2e_user_journeys import E2ETestHelper
 
 # Absolute requirement - no bypasses allowed
 require_docker("""
@@ -37,10 +34,6 @@ To run these tests, you MUST use Docker:
 
 These tests are designed to be destructive and CANNOT be run outside Docker.
 """)
-
-
-# Import test helper from existing E2E tests
-from docker_test_e2e_user_journeys import E2ETestHelper
 
 
 def test_enhanced_daily_developer_workflow():
@@ -160,7 +153,7 @@ def test_enhanced_backup_and_disaster_recovery():
         # Setup environment with backup enabled
         print("1. Setting up environment with backups enabled...")
         helper.create_dotfiles_structure()
-        config_path = helper.create_config_file()
+        helper.create_config_file()
         
         # Config already has backups enabled by default
         # No need to modify the config
