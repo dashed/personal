@@ -154,7 +154,7 @@ When you're ready, apply the changes:
 uv run dotfiles-sync --apply sync
 
 # Output:
-#  Created link: ~/.gitconfig -> /path/to/dotfiles/git/gitconfig
+# Created link: ~/.gitconfig -> /path/to/dotfiles/git/gitconfig
 # Backup saved to: ~/.local/state/dotfiles/backups/...
 ```
 
@@ -169,7 +169,7 @@ uv run dotfiles-sync status
 # Dotfiles Status
 # Managed files: 1
 # Last sync: 2025-08-10 10:30:00
-#  ~/.gitconfig -> /path/to/dotfiles/git/gitconfig
+# ~/.gitconfig -> /path/to/dotfiles/git/gitconfig
 ```
 
 ## Documentation
