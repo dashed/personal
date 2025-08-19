@@ -19,7 +19,7 @@
 
 If you're new to dotfiles, don't worry! **Dotfiles** are configuration files that start with a dot (`.`) like `.bashrc`, `.gitconfig`, or `.vimrc`. They control how your programs behave and look. Managing dotfiles means:
 
-- = **Keeping settings synchronized** across multiple computers
+- **Keeping settings synchronized** across multiple computers
 - **Backing up** your configurations safely
 - **Quickly setting up** new machines with your preferences
 - **Sharing** configurations with teammates or the community
@@ -28,11 +28,11 @@ If you're new to dotfiles, don't worry! **Dotfiles** are configuration files tha
 
 Unlike manual copying or basic scripts, this system provides:
 
--  **Safety First**: Automatic backups before any changes
+- **Safety First**: Automatic backups before any changes
 - **Preview Mode**: See what will happen before it does (dry-run by default)
-- � **Rollback**: Undo any operation if something goes wrong
+- **Rollback**: Undo any operation if something goes wrong
 - **Declarative**: Describe what you want, not how to do it
-- =� **Security**: Path validation and command whitelisting
+- **Security**: Path validation and command whitelisting
 
 ## Getting Started
 
@@ -449,7 +449,7 @@ dotfiles-sync diff
 dotfiles-sync diff --detailed
 ```
 
-## < Real-World Examples
+## Real-World Examples
 
 ### Example 1: Complete Developer Setup
 
@@ -596,7 +596,7 @@ dst = "~/.tmux.conf"
 description = "Tmux configuration (all machines)"
 ```
 
-## =� Advanced Usage
+## Advanced Usage
 
 ### Custom Safety Settings
 
@@ -645,7 +645,7 @@ variants = ["work"]
 description = "Work Linux bash configuration"
 ```
 
-## =' Troubleshooting
+## Troubleshooting
 
 ### Common Issues and Solutions
 
@@ -1007,6 +1007,6 @@ This project is licensed under the MIT License - see [LICENSE](./LICENSE) for de
 
 **Happy Dotfiles Management!**
 
-Made with d by the Dotfiles Community
+Made with love by the Dotfiles Community
 
 </div>
