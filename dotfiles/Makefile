@@ -14,6 +14,7 @@ help:
 	@echo "Development:"
 	@echo "  make test         Run unit tests with coverage"
 	@echo "  make test-v       Run tests with verbose output"
+	@echo "  make test-cleanup Run Phase 3 cleanup unit tests"
 	@echo "  make lint         Run linters (ruff)"
 	@echo "  make format       Format code with ruff"
 	@echo "  make typecheck    Run ty type checking (strict)"
@@ -56,6 +57,8 @@ help:
 	@echo "  make docker-test-database  # Database integration tests"
 	@echo "  make docker-test-drift     # Configuration drift detection tests"
 	@echo "  make docker-test-phase3    # Phase 3: Enhanced user journeys"
+	@echo "  make docker-test-cleanup   # Phase 3: Cleanup and reconciliation"
+	@echo "  make docker-test-phase3-all # All Phase 3 tests (journeys + cleanup)"
 
 # Install production dependencies
 install:
@@ -86,8 +89,15 @@ test-drift:
 test-cli-drift:
 	uv run pytest tests/unit/test_cli_drift.py -v --tb=short
 
+# Run cleanup functionality unit tests (Phase 3)
+test-cleanup:
+	uv run pytest tests/unit/test_cleanup.py -v --tb=short
+
 # Run all drift-related unit tests
 test-drift-all: test-drift test-cli-drift
+
+# Run all cleanup-related unit tests (Phase 3)
+test-cleanup-all: test-cleanup
 
 # Run linters
 lint:
@@ -354,6 +364,14 @@ docker-test-phase3:
 	@echo "🚀 Running Phase 3: Enhanced User Journey Tests in Docker..."
 	@docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1)
 	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 -e DOTFILES_TEST_MODE=true --entrypoint python dotfiles-test /app/tests/integration/docker_test_phase3_user_journeys.py
+
+docker-test-cleanup:
+	@echo "🧹 Running Phase 3: Cleanup and Reconciliation Tests in Docker..."
+	@docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1)
+	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 -e DOTFILES_TEST_MODE=true --entrypoint python dotfiles-test /app/tests/integration/docker_test_phase3_cleanup.py
+
+docker-test-phase3-all: docker-test-phase3 docker-test-cleanup
+	@echo "✅ All Phase 3 tests completed!"
 
 # Test configuration drift detection (Phase 1)
 docker-test-drift:
