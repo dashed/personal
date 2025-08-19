@@ -285,105 +285,278 @@ description = "Set default Git branch"
 
 ### Configuration File Structure
 
-Your `dotfiles.toml` file has four main sections:
+Your `dotfiles.toml` file uses TOML format with four main sections. **For complete technical reference, see [docs/DOTFILES_TOML_REFERENCE.md](./docs/DOTFILES_TOML_REFERENCE.md).**
 
 ```toml
 # 1. Package metadata (required)
 [package]
-name = "my-dotfiles"
-version = "1.0.0"
-author = "Your Name <email@example.com>"
-description = "Description of your dotfiles"
+name = "my-dotfiles"                    # Required: package name
+version = "1.0.0"                       # Required: semantic version (X.Y.Z)
+author = "Your Name <email@example.com>" # Optional: author information
+description = "My personal dotfiles"    # Optional: description
 
-# 2. Safety settings (optional, these are defaults)
+# 2. Safety settings (optional, these are sensible defaults)
 [safety]
-dry_run_default = true         # Preview by default
-backup_before_modify = true    # Always backup
-backup_retention_days = 30     # Keep backups for 30 days
-verify_checksums = true        # Verify file integrity
-fail_on_error = false          # Continue on errors
-require_confirmation = false   # Interactive confirmation
+dry_run_default = true          # Default: true - always preview first
+backup_before_modify = true     # Default: true - create backups
+backup_retention_days = 30      # Default: 30 - days to keep backups
+verify_checksums = true         # Default: true - verify file integrity
+fail_on_error = true           # Default: true - stop on first error
+max_operations = 1000          # Default: 1000 - safety limit
+require_confirmation = true    # Default: true - ask before destructive ops
 
 # 3. Security settings (optional but recommended)
 [security]
-whitelist_paths = [
-    "~/**",                    # Allow home directory
-    "/usr/local/bin/*"         # Allow local binaries
+whitelist_paths = [             # Default: ["~/.config", "~/.local"]
+    "~/.config/**",             # Allow home config directory
+    "~/.local/**",              # Allow home local directory
+    "~/.bashrc",                # Specific files
+    "~/.gitconfig"
 ]
-blacklist_paths = [
-    "/etc/**",                 # Block system configs
-    "/System/**",              # Block macOS system
-    "~/.ssh/authorized_keys"   # Block sensitive files
+blacklist_paths = [             # Default: ["/etc", "/usr", "/System"]
+    "/etc/**",                  # System configuration files
+    "/usr/**",                  # System binaries
+    "/System/**",               # macOS system files
+    "~/.ssh/id_*",             # SSH private keys
 ]
-allowed_commands = [
-    "chmod *",                 # Allow permission changes
-    "git config *"             # Allow git configuration
+secret_provider = "environment"  # Options: environment, keychain, onepassword
+enable_command_whitelist = false # Default: false
+allowed_commands = [            # Commands allowed when whitelisting enabled
+    "chmod *",
+    "git config *"
 ]
-enable_command_whitelist = true
 
 # 4. Steps - your operations (at least one required)
 [[step]]
+op = "link"                     # Operation type (see all types below)
+src = "config/file"            # Source path (relative to dotfiles.toml)
+dst = "~/.config/file"         # Destination path
+description = "Link config file" # Human-readable description
+
+# Common optional fields for all operations:
+variants = ["all"]              # Default: ["all"] - which variants apply
+platforms = ["macos", "linux"] # Default: all - target platforms
+create_parent_dirs = true      # Default: false - auto-create directories
+mode = "0644"                  # File permissions (for copy operations)
+overwrite = true               # Default: false - overwrite existing files
+backup = true                  # Default: true - backup before overwrite
+sudo = false                   # Default: false - require sudo (security risk)
+```
+
+### All Operation Types
+
+The system supports **12 operation types**. Here are the most common ones:
+
+#### File Operations
+```toml
+# Link files (real-time sync)
+[[step]]
 op = "link"
-src = "source/file"
-dst = "~/destination"
-# Optional fields for all operations:
-platforms = ["darwin", "linux"]  # Only run on these OS
-variants = ["personal", "work"]  # Only for these variants
-create_parent_dirs = true        # Create missing directories
+src = "vim/vimrc"
+dst = "~/.vimrc"
+description = "Link Vim config"
+
+# Copy files (independent copies)
+[[step]]
+op = "copy"
+src = "ssh/config"
+dst = "~/.ssh/config"
+mode = "0600"                  # Secure permissions
+description = "Copy SSH config"
+
+# Synchronize entire directories
+[[step]]
+op = "syncdir"
+src = "vscode"
+dst = "~/Library/Application Support/Code/User"
+exclude = ["*.log", "workspaceStorage"]  # Skip patterns
+description = "Sync VS Code settings"
+```
+
+#### Text Operations
+```toml
+# Append text to files (with idempotency)
+[[step]]
+op = "append"
+text = """
+# Custom aliases
+alias ll='ls -la'
+alias gs='git status'
+"""
+dst = "~/.bashrc"
+marker = "# DOTFILES_ALIASES"   # Prevents duplicates
+description = "Add custom aliases"
+
+# Prepend text to files
+[[step]]
+op = "prepend"
+text = "# Managed by dotfiles-sync\n"
+dst = "~/.zshrc"
+marker = "# DOTFILES_HEADER"
+description = "Add header"
+```
+
+#### Package Management
+```toml
+# Homebrew (macOS/Linux)
+[[step]]
+op = "brew_install"
+packages = ["git", "ripgrep", "fd", "bat"]
+platforms = ["macos"]
+description = "Install development tools"
+
+# APT (Debian/Ubuntu)
+[[step]]
+op = "apt_install"
+packages = ["git", "ripgrep", "fd-find"]
+platforms = ["linux"]
+sudo = true
+description = "Install packages"
+
+# DNF (Fedora/RHEL)
+[[step]]
+op = "dnf_install"
+packages = ["git", "ripgrep", "fd-find"]
+platforms = ["linux"]
+sudo = true
+description = "Install Fedora packages"
+```
+
+#### Advanced Operations
+```toml
+# Template processing with Jinja2
+[[step]]
+op = "template"
+src = "git/gitconfig.j2"
+dst = "~/.gitconfig"
+vars = { 
+    email = "${WORK_EMAIL}", 
+    name = "John Doe" 
+}
+description = "Generate work git config"
+
+# Secret management
+[[step]]
+op = "secret_ref"
+key = "work/api-token"
+dst = "~/.config/app/token"
+mode = "0600"
+description = "Install API token"
+
+# Run commands
+[[step]]
+op = "run"
+command = "chmod 700 ~/.ssh"
+description = "Secure SSH directory"
+
+# Run commands once (tracked by checksum)
+[[step]]
+op = "run_once"
+command = "git config --global init.defaultBranch main"
+checksum = "git_default_branch_v1"
+description = "Set git default branch"
 ```
 
 ### Platform and Variant Support
 
 #### Platforms
 
-Limit operations to specific operating systems:
+Target specific operating systems:
 
 ```toml
-[[step]]
-op = "link"
-src = "mac/sketchybar"
-dst = "~/.config/sketchybar"
-platforms = ["darwin"]  # Only on macOS
-description = "macOS menu bar configuration"
+# macOS only
+platforms = ["macos"]
 
-[[step]]
-op = "copy"
-src = "linux/xinitrc"
-dst = "~/.xinitrc"
-platforms = ["linux"]  # Only on Linux
-description = "X11 initialization"
+# Linux only  
+platforms = ["linux"]
+
+# Cross-platform
+platforms = ["macos", "linux", "windows"]
+
+# All platforms (default)
+# platforms = ["all"]  # or omit entirely
 ```
+
+**Valid platforms:** `macos`, `linux`, `windows`, `all`
 
 #### Variants
 
 Use variants for different machine configurations:
 
 ```toml
-# Work-specific Git configuration
-[[step]]
-op = "copy"
-src = "git/gitconfig-work"
-dst = "~/.gitconfig"
-variants = ["work"]
-description = "Work Git configuration"
-
-# Personal Git configuration
+# Personal configuration
 [[step]]
 op = "copy"
 src = "git/gitconfig-personal"
 dst = "~/.gitconfig"
 variants = ["personal"]
-description = "Personal Git configuration"
+description = "Personal Git config"
+
+# Work configuration
+[[step]]
+op = "template"
+src = "git/gitconfig-work.j2" 
+dst = "~/.gitconfig"
+variants = ["work"]
+vars = { email = "${WORK_EMAIL}" }
+description = "Work Git config"
+
+# Multiple variants
+[[step]]
+op = "link"
+src = "shell/aliases"
+dst = "~/.aliases"
+variants = ["personal", "work"]  # Apply to both
+description = "Common aliases"
 ```
 
-Run with a specific variant:
-
+**Run with variants:**
 ```bash
 # Use work configuration
 uv run dotfiles-sync --variant work sync
 
-# Use personal configuration
+# Use personal configuration  
 uv run dotfiles-sync --variant personal sync
+
+# Use default variant (applies "all" and "default")
+uv run dotfiles-sync sync
+```
+
+### Path Handling and Security
+
+#### Path Types
+- **Relative paths**: `config/file` (relative to dotfiles.toml)
+- **Home paths**: `~/.config/file` (recommended)
+- **Absolute paths**: `/home/user/.config/file`
+
+#### Security Features
+- **Whitelisting**: Only allowed paths can be modified
+- **Blacklisting**: Forbidden paths are blocked (takes precedence)  
+- **Command filtering**: Restrict which commands can run
+- **Permission control**: Set specific file permissions
+- **Glob patterns**: Use `*`, `**`, `?` in paths
+
+#### Best Practices
+1. **Use whitelist paths** to restrict where operations can write
+2. **Blacklist sensitive areas** like `/etc`, `/usr`, `/System`  
+3. **Set secure permissions** for sensitive files (`mode = "0600"`)
+4. **Avoid sudo** unless absolutely necessary
+5. **Test with dry-run** before applying changes
+
+### Configuration Validation
+
+The system validates your configuration and shows helpful error messages:
+
+```bash
+# Check configuration for errors
+uv run dotfiles-sync validate
+
+# Common validation errors:
+# - Missing required fields (src, dst for file operations)
+# - Invalid version format (must be X.Y.Z)
+# - Invalid platform names
+# - Path conflicts (whitelist/blacklist overlap)
+# - Invalid file permissions
 ```
 
 ### Command-Line Interface
