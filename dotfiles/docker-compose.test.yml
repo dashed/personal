@@ -1,0 +1,78 @@
+# docker-compose.test.yml - Test matrix for Phase 1 MVP
+# Provides safe, isolated testing across different scenarios
+
+version: '3.8'
+
+services:
+  # Test with default variant on Ubuntu
+  phase1-ubuntu-default:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      args:
+        BASE_IMAGE: ubuntu:24.04
+        VARIANT: default
+    volumes:
+      - ./test-results:/tmp/results
+    environment:
+      - TEST_NAME=phase1-ubuntu-default
+      - DOTFILES_VARIANT=default
+    networks:
+      - test-network
+
+  # Test with personal variant on Ubuntu
+  phase1-ubuntu-personal:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      args:
+        BASE_IMAGE: ubuntu:24.04
+        VARIANT: personal
+    volumes:
+      - ./test-results:/tmp/results
+    environment:
+      - TEST_NAME=phase1-ubuntu-personal
+      - DOTFILES_VARIANT=personal
+    networks:
+      - test-network
+
+  # Test with work variant on Ubuntu
+  phase1-ubuntu-work:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      args:
+        BASE_IMAGE: ubuntu:24.04
+        VARIANT: work
+    volumes:
+      - ./test-results:/tmp/results
+    environment:
+      - TEST_NAME=phase1-ubuntu-work
+      - DOTFILES_VARIANT=work
+    networks:
+      - test-network
+
+  # Test on Debian for compatibility
+  phase1-debian-default:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      args:
+        BASE_IMAGE: debian:bookworm
+        VARIANT: default
+    volumes:
+      - ./test-results:/tmp/results
+    environment:
+      - TEST_NAME=phase1-debian-default
+      - DOTFILES_VARIANT=default
+    networks:
+      - test-network
+
+
+networks:
+  test-network:
+    driver: bridge
+
+volumes:
+  test-results:
+    driver: local

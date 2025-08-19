@@ -1,0 +1,36 @@
+# Test configuration for unit tests
+
+[package]
+name = "test-dotfiles"
+version = "0.1.0"
+author = "Test User <test@example.com>"
+
+[safety]
+dry_run_default = true
+backup_before_modify = true
+backup_retention_days = 7
+verify_checksums = false
+fail_on_error = true
+
+[security]
+whitelist_paths = ["~/**", "/tmp/**"]
+blacklist_paths = ["/etc", "/usr"]
+
+# Test steps
+[[step]]
+op = "link"
+src = "test/file1"
+dst = "~/.test_file1"
+variants = ["default", "test"]
+
+[[step]]
+op = "copy"
+src = "test/file2"
+dst = "~/.test_file2"
+variants = ["test"]
+
+[[step]]
+op = "brew_install"
+packages = ["test-package"]
+variants = ["test"]
+platforms = ["macos"]

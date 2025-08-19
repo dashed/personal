@@ -1,0 +1,82 @@
+# Dockerfile.test - Multi-stage build for comprehensive dotfiles testing using uv
+# This provides a safe, isolated environment for testing core operations and safety features
+
+ARG BASE_IMAGE=ubuntu:24.04
+ARG VARIANT=default
+
+# Stage 1: Base OS with Python 3.12
+FROM ${BASE_IMAGE} as base
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-venv \
+    python3-pip \
+    git \
+    curl \
+    sudo \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Stage 2: Install uv and set up user
+FROM base as uv-base
+# Install uv directly
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# Create test user (don't run as root for safety)
+RUN useradd -m -s /bin/bash testuser && \
+    echo "testuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+USER testuser
+WORKDIR /home/testuser
+
+# Install uv for the test user
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/home/testuser/.local/bin:$PATH"
+
+# Stage 3: Copy repository and install dependencies
+FROM uv-base as deps
+# Set uv environment variables for optimal Docker performance
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
+ENV UV_PYTHON=python3
+
+# Copy project files
+COPY --chown=testuser:testuser pyproject.toml uv.lock* ./dotfiles/
+WORKDIR /home/testuser/dotfiles
+
+# Install dependencies using uv
+RUN uv sync --frozen --no-install-project
+
+# Copy the rest of the project
+COPY --chown=testuser:testuser . ./
+
+# Copy test runner script
+COPY --chown=testuser:testuser docker-test-runner.sh ./
+RUN chmod +x docker-test-runner.sh
+
+# Install the project itself
+RUN uv sync --frozen
+
+# Verify installation
+RUN uv run dotfiles-sync --version
+
+# Stage 4: Comprehensive integration testing
+FROM deps as test
+ARG VARIANT
+ENV DOTFILES_VARIANT=${VARIANT}
+ENV DOTFILES_TEST_MODE=true
+ENV PATH="/home/testuser/dotfiles/.venv/bin:$PATH"
+
+# Create test dotfiles in the repository
+RUN mkdir -p test-dotfiles && \
+    echo "# Test zshrc for ${VARIANT}" > test-dotfiles/test-zshrc && \
+    echo "# Test gitconfig" > test-dotfiles/test-gitconfig && \
+    echo "alias test-alias='echo testing'" > test-dotfiles/test-aliases
+
+# Create a test configuration with safety features enabled
+RUN printf '[package]\nname = "test-dotfiles"\nversion = "1.0.0"\nauthor = "Test User <test@example.com>"\n\n[safety]\ndry_run_default = true\nbackup_before_modify = true\nbackup_retention_days = 7\nverify_checksums = true\n\n[security]\nwhitelist_paths = ["/home/testuser/**", "/tmp/**"]\nblacklist_paths = ["/etc/**", "/root/**"]\nenable_command_whitelist = false\n\n[[step]]\nop = "link"\nsrc = "test-dotfiles/test-zshrc"\ndst = "~/.test-zshrc"\nvariants = ["all"]\n\n[[step]]\nop = "copy"\nsrc = "test-dotfiles/test-gitconfig"\ndst = "~/.test-gitconfig"\nvariants = ["all"]\n\n[[step]]\nop = "link"\nsrc = "test-dotfiles/test-aliases"\ndst = "~/.test-aliases"\nvariants = ["default", "personal"]\n' > test-config.toml
+
+# Final stage: Ready for testing
+FROM test as final
+
+# Default command for testing
+CMD ["/bin/bash"]

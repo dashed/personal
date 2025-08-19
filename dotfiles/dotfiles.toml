@@ -1,0 +1,29 @@
+# Minimal dotfiles configuration for managing CLAUDE.md
+
+[package]
+name = "my-dotfiles"
+version = "1.0.0"
+author = "User <user@example.com>"
+description = "Personal dotfiles configuration"
+
+[safety]
+dry_run_default = true         # Always preview changes first
+backup_before_modify = true    # Create backups before changes
+backup_retention_days = 30     # Keep backups for 30 days
+
+[security]
+whitelist_paths = [
+    "~/**",                    # Allow all paths in home directory
+]
+blacklist_paths = [
+    "/etc/**",                 # Never modify system files
+    "/System/**",              # Never modify macOS system files
+]
+
+# Copy CLAUDE.md configuration
+[[step]]
+op = "copy"
+src = "configs/claude/CLAUDE.md"
+dst = "~/.claude/CLAUDE.md"
+description = "Copy Claude configuration file"
+create_parent_dirs = true      # Create ~/.claude directory if needed
