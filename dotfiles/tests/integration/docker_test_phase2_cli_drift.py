@@ -22,7 +22,7 @@ require_docker()
 # Now safe to import the actual modules
 from dotfiles_sync.cli import cli  # noqa: E402
 from dotfiles_sync.state_database import StateDatabase  # noqa: E402
-from dotfiles_sync.models import TransactionContext  # noqa: E402
+from dotfiles_sync.models import TransactionContext, StepConfig, OperationType  # noqa: E402
 
 import pytest  # noqa: E402
 from click.testing import CliRunner  # noqa: E402
@@ -71,10 +71,16 @@ dst = "/tmp/test_bashrc"
         db_path = test_dir / "test.db"
         with StateDatabase(db_path=str(db_path)) as db:
             with db.transaction("default", "test", "docker") as tx:
+                # Create a proper StepConfig to ensure hash matches
+                step = StepConfig(
+                    op=OperationType.LINK,
+                    src="files/bashrc",
+                    dst="/tmp/test_bashrc"
+                )
                 db.record_applied_step(
                     tx,
                     "link",
-                    {"op": "link", "src": "files/bashrc", "dst": "/tmp/test_bashrc"},
+                    step.model_dump(exclude_none=True),
                     src_path="files/bashrc",
                     dst_path="/tmp/test_bashrc",
                 )
@@ -83,7 +89,7 @@ dst = "/tmp/test_bashrc"
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "drift-check"],
-            env={"DOTFILES_DB_PATH": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)}
         )
         
         assert result.exit_code == 0
@@ -125,7 +131,7 @@ dst = "/tmp/test_vimrc"
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "drift-check"],
-            env={"DOTFILES_DB_PATH": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)}
         )
         
         assert result.exit_code == 1  # Exit code 1 indicates drift exists
@@ -151,17 +157,28 @@ dst = "/tmp/test_bashrc"
         db_path = test_dir / "test.db"
         with StateDatabase(db_path=str(db_path)) as db:
             with db.transaction("default", "test", "docker") as tx:
+                # Create proper StepConfig objects
+                step1 = StepConfig(
+                    op=OperationType.LINK,
+                    src="files/bashrc",
+                    dst="/tmp/test_bashrc"
+                )
                 db.record_applied_step(
                     tx,
                     "link",
-                    {"op": "link", "src": "files/bashrc", "dst": "/tmp/test_bashrc"},
+                    step1.model_dump(exclude_none=True),
                     src_path="files/bashrc",
                     dst_path="/tmp/test_bashrc",
+                )
+                step2 = StepConfig(
+                    op=OperationType.COPY,
+                    src="files/vimrc",
+                    dst="/tmp/test_vimrc"
                 )
                 db.record_applied_step(
                     tx,
                     "copy",
-                    {"op": "copy", "src": "files/vimrc", "dst": "/tmp/test_vimrc"},
+                    step2.model_dump(exclude_none=True),
                     src_path="files/vimrc",
                     dst_path="/tmp/test_vimrc",
                 )
@@ -170,7 +187,7 @@ dst = "/tmp/test_bashrc"
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "drift-check"],
-            env={"DOTFILES_DB_PATH": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)}
         )
         
         assert result.exit_code == 1
@@ -200,7 +217,7 @@ dst = "/tmp/test_bashrc"
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "drift-check", "--format", "json"],
-            env={"DOTFILES_DB_PATH": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)}
         )
         
         assert result.exit_code == 1
@@ -246,7 +263,7 @@ dst = "/tmp/test_vimrc"
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "status", "--config-drift"],
-            env={"DOTFILES_DB_PATH": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)}
         )
         
         assert result.exit_code == 0
@@ -285,7 +302,7 @@ dst = "/tmp/test_bashrc"
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "validate", "--check-database"],
-            env={"DOTFILES_DB_PATH": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)}
         )
         
         assert result.exit_code == 0
@@ -301,6 +318,9 @@ dst = "/tmp/test_bashrc"
 [package]
 name = "test-dotfiles"
 version = "1.0.0"
+
+[security]
+whitelist_paths = ["~/**", "/tmp/**"]
 
 [[step]]
 op = "copy"
@@ -318,9 +338,16 @@ dst = "/tmp/test_bashrc_sync"
         # Run sync command with --show-drift
         result = runner.invoke(
             cli,
-            ["--config", str(config_path), "sync", "--show-drift", "--force"],
-            env={"DOTFILES_DB_PATH": str(db_path)}
+            ["--config", str(config_path), "--force", "--apply", "sync", "--show-drift"],
+            env={"DOTFILES_STATE_DB": str(db_path)}
         )
+        
+        # Debug output if test fails
+        if result.exit_code != 0:
+            print(f"Exit code: {result.exit_code}")
+            print(f"Output: {result.output}")
+            if result.exception:
+                print(f"Exception: {result.exception}")
         
         assert result.exit_code == 0
         assert "Pre-sync Drift Analysis" in result.output
@@ -359,7 +386,7 @@ mode = "0644"
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "drift-check", "--detailed"],
-            env={"DOTFILES_DB_PATH": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)}
         )
         
         assert result.exit_code == 1
@@ -401,7 +428,7 @@ variants = ["work"]
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "--variant", "default", "drift-check"],
-            env={"DOTFILES_DB_PATH": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)}
         )
         assert result.exit_code == 1
         assert "/tmp/test_bashrc" in result.output
@@ -411,7 +438,7 @@ variants = ["work"]
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "--variant", "personal", "drift-check"],
-            env={"DOTFILES_DB_PATH": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)}
         )
         assert result.exit_code == 1
         assert "/tmp/test_vimrc" in result.output
