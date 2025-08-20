@@ -222,34 +222,30 @@ class EnhancedOperationExecutor:
                         if enhanced_ctx:
                             base_ctx = enhanced_ctx.base_context
 
-                            # Import here to avoid circular imports
-                            from dotfiles_sync.state_database import StateDatabase
+                            # Calculate checksum if needed for this operation
+                            checksum = None
+                            dst_path = step.dst
+                            if dst_path and dst_path.startswith("~"):
+                                dst_path = str(Path(dst_path).expanduser())
 
-                            with StateDatabase() as db:
-                                # Calculate checksum if needed for this operation
-                                checksum = None
-                                dst_path = step.dst
-                                if dst_path and dst_path.startswith("~"):
-                                    dst_path = str(Path(dst_path).expanduser())
+                            if dst_path and Path(dst_path).exists():
+                                import hashlib
 
-                                if dst_path and Path(dst_path).exists():
-                                    import hashlib
+                                try:
+                                    with open(dst_path, "rb") as f:
+                                        checksum = hashlib.sha256(f.read()).hexdigest()
+                                except Exception:
+                                    checksum = None
 
-                                    try:
-                                        with open(dst_path, "rb") as f:
-                                            checksum = hashlib.sha256(f.read()).hexdigest()
-                                    except Exception:
-                                        checksum = None
-
-                                # Record the applied step
-                                db.record_applied_step(
-                                    tx=base_ctx,
-                                    operation_type=step.op.value,
-                                    src_path=step.src if hasattr(step, "src") and step.src else "",
-                                    dst_path=dst_path,
-                                    checksum=checksum,
-                                    config=step.model_dump(),
-                                )
+                            # Record the applied step using the transaction's database connection
+                            self.database.record_applied_step(
+                                tx=base_ctx,
+                                operation_type=step.op.value,
+                                src_path=step.src if hasattr(step, "src") and step.src else "",
+                                dst_path=dst_path,
+                                checksum=checksum,
+                                config=step.model_dump(exclude_none=True),
+                            )
 
                     # Stop on failure unless forced
                     if not result.success and not exec_ctx.force:

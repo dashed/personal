@@ -32,7 +32,13 @@ class StateDatabase:
     def __init__(self, db_path: Optional[Union[Path, str]] = None):
         """Initialize database connection and ensure schema exists."""
         if db_path is None:
-            db_path = Path.home() / ".local" / "state" / "dotfiles" / "state.db"
+            # Check environment variable first
+            import os
+            env_db_path = os.environ.get("DOTFILES_STATE_DB")
+            if env_db_path:
+                db_path = Path(env_db_path)
+            else:
+                db_path = Path.home() / ".local" / "state" / "dotfiles" / "state.db"
         elif isinstance(db_path, str):
             db_path = Path(db_path)
 
@@ -42,7 +48,7 @@ class StateDatabase:
         # Connect with better defaults
         self.conn = sqlite3.connect(
             str(self.db_path),
-            isolation_level=None,  # Autocommit mode
+            isolation_level="DEFERRED",  # Use deferred transaction mode for proper transaction support
             check_same_thread=False,
         )
         self.conn.row_factory = sqlite3.Row  # Enable column access by name
@@ -54,6 +60,9 @@ class StateDatabase:
         # Initialize schema if needed
         self._init_schema()
         self._update_system_info()
+        
+        # Commit the initialization changes
+        self.conn.commit()
 
     def _init_schema(self) -> None:
         """Initialize database schema from SQL file."""
@@ -115,7 +124,10 @@ class StateDatabase:
         )
 
         try:
-            # Start transaction
+            # Start database transaction
+            self.conn.execute("BEGIN")
+            
+            # Record transaction in database
             self.conn.execute(
                 """
                 INSERT INTO transactions (id, variant, user, hostname, dry_run, metadata, status)
@@ -142,6 +154,9 @@ class StateDatabase:
             """,
                 (tx.id,),
             )
+            
+            # Commit the transaction
+            self.conn.commit()
 
         except Exception as e:
             # Mark as failed and potentially trigger rollback
@@ -155,6 +170,8 @@ class StateDatabase:
             """,
                 (str(e), tx.id),
             )
+            # Rollback the transaction
+            self.conn.rollback()
             raise
 
     def record_operation(
