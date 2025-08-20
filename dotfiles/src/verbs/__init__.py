@@ -30,6 +30,10 @@ from .append import AppendVerb
 from .prepend import PrependVerb
 from .run import RunVerb
 from .run_once import RunOnceVerb
+from .brew import BrewVerb
+from .apt import AptVerb
+from .template import TemplateVerb
+from .secret import SecretVerb
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +60,11 @@ class VerbRegistry:
         self.register("prepend", PrependVerb)
         self.register("run", RunVerb)
         self.register("run_once", RunOnceVerb)
+        # Phase 4: Extended Operations
+        self.register("brew_install", BrewVerb)
+        self.register("apt_install", AptVerb)
+        self.register("template", TemplateVerb)
+        self.register("secret_ref", SecretVerb)
 
     def register(self, operation_type: str, verb_class: Type[Verb]) -> None:
         """
@@ -301,7 +310,7 @@ class EnhancedOperationExecutor:
         files_to_backup = []
 
         for step in steps:
-            if step.dst and step.op.value in ["link", "copy", "syncdir", "template"]:
+            if step.dst and step.op.value in ["link", "copy", "syncdir", "template", "secret_ref"]:
                 dst_path = exec_ctx.expand_path(step.dst)
                 if dst_path.exists():
                     files_to_backup.append(dst_path)

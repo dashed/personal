@@ -47,9 +47,10 @@ class OperationContext:
         self.sequence_num = sequence_num
         self.operation_id = operation_id
 
+        dry_run_status = self.execution_context.dry_run if self.execution_context else "N/A"
         logger.debug(
             f"OperationContext: {self.operation_type} "
-            f"(seq={self.sequence_num}, dry_run={self.execution_context.dry_run})"
+            f"(seq={self.sequence_num}, dry_run={dry_run_status})"
         )
 
     def get_src_path(self) -> Optional[Path]:

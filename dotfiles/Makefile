@@ -373,6 +373,15 @@ docker-test-cleanup:
 docker-test-phase3-all: docker-test-phase3 docker-test-cleanup
 	@echo "✅ All Phase 3 tests completed!"
 
+# Phase 4: Advanced Safety and Rollback Tests
+docker-test-phase4:
+	@echo "🛡️ Running Phase 4: Advanced Safety and Rollback Tests in Docker..."
+	@docker build -q -t dotfiles-test -f Dockerfile.test . || (echo "❌ Failed to build Docker image" && exit 1)
+	@docker run --rm -v $(PWD):/app -e RUNNING_IN_DOCKER=1 -e DOTFILES_TEST_MODE=true --entrypoint python dotfiles-test /app/tests/integration/docker_test_phase4_safety.py
+
+docker-test-phase4-all: docker-test-phase4
+	@echo "✅ All Phase 4 tests completed!"
+
 # Test configuration drift detection (Phase 1)
 docker-test-drift:
 	@echo "🔍 Running Configuration Drift Detection Tests in Docker..."

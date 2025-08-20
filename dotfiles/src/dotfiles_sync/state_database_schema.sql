@@ -369,6 +369,103 @@ VALUES (
 );
 
 -- ============================================================================
+-- PHASE 4: ADVANCED SAFETY AND ROLLBACK - SCHEMA ENHANCEMENTS
+-- ============================================================================
+-- These tables support advanced configuration change tracking, orphaned
+-- operation management, and restoration capabilities.
+
+-- ============================================================================
+-- CONFIGURATION VERSION TRACKING
+-- ============================================================================
+
+-- Track configuration file versions
+CREATE TABLE IF NOT EXISTS config_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    config_hash TEXT UNIQUE NOT NULL,
+    config_content TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    file_mtime TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata JSON
+);
+
+CREATE INDEX IF NOT EXISTS idx_config_versions_hash ON config_versions(config_hash);
+CREATE INDEX IF NOT EXISTS idx_config_versions_created ON config_versions(created_at);
+
+-- ============================================================================
+-- ORPHANED OPERATIONS TRACKING
+-- ============================================================================
+
+-- Track operations that have been orphaned for potential restoration
+CREATE TABLE IF NOT EXISTS orphaned_operations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    original_applied_step_id INTEGER NOT NULL,
+    step_hash TEXT NOT NULL,
+    dst_path TEXT,
+    operation_type TEXT,
+    config JSON,
+    orphaned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    orphaned_by_transaction TEXT,
+    orphaned_reason TEXT,  -- 'removed_from_config', 'modified', 'variant_changed', etc.
+    restoration_data JSON,  -- Data needed to restore (includes backup paths, etc.)
+    restored_at TIMESTAMP,
+    restored_by_transaction TEXT,
+    FOREIGN KEY (original_applied_step_id) REFERENCES applied_steps(id),
+    FOREIGN KEY (orphaned_by_transaction) REFERENCES transactions(id),
+    FOREIGN KEY (restored_by_transaction) REFERENCES transactions(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_orphaned_ops_path ON orphaned_operations(dst_path);
+CREATE INDEX IF NOT EXISTS idx_orphaned_ops_type ON orphaned_operations(operation_type);
+CREATE INDEX IF NOT EXISTS idx_orphaned_ops_date ON orphaned_operations(orphaned_at);
+CREATE INDEX IF NOT EXISTS idx_orphaned_ops_restored ON orphaned_operations(restored_at);
+
+-- ============================================================================
+-- CONFIGURATION CHANGE HISTORY
+-- ============================================================================
+
+-- Track configuration changes between versions
+CREATE TABLE IF NOT EXISTS config_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    old_version_id INTEGER,
+    new_version_id INTEGER,
+    change_type TEXT,  -- 'add_step', 'remove_step', 'modify_step', 'reorder', etc.
+    affected_path TEXT,
+    old_config JSON,
+    new_config JSON,
+    change_metadata JSON,  -- Additional context about the change
+    FOREIGN KEY (old_version_id) REFERENCES config_versions(id),
+    FOREIGN KEY (new_version_id) REFERENCES config_versions(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_config_changes_date ON config_changes(changed_at);
+CREATE INDEX IF NOT EXISTS idx_config_changes_type ON config_changes(change_type);
+CREATE INDEX IF NOT EXISTS idx_config_changes_path ON config_changes(affected_path);
+
+-- ============================================================================
+-- CLEANUP HISTORY
+-- ============================================================================
+
+-- Track cleanup operations for audit and restoration
+CREATE TABLE IF NOT EXISTS cleanup_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    transaction_id TEXT NOT NULL,
+    cleaned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    operation_count INTEGER,
+    files_removed INTEGER,
+    files_backed_up INTEGER,
+    cleanup_type TEXT,  -- 'orphaned', 'modified', 'all', 'selective'
+    cleanup_filters JSON,  -- Filters used (paths, operations, before date, etc.)
+    cleanup_result JSON,  -- Detailed results including errors
+    dry_run BOOLEAN DEFAULT 0,
+    FOREIGN KEY (transaction_id) REFERENCES transactions(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cleanup_history_date ON cleanup_history(cleaned_at);
+CREATE INDEX IF NOT EXISTS idx_cleanup_history_type ON cleanup_history(cleanup_type);
+
+-- ============================================================================
 -- MAINTENANCE QUERIES
 -- ============================================================================
 

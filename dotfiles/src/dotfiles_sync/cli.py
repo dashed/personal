@@ -6,6 +6,7 @@ This module provides the command-line interface using Click framework.
 
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -370,17 +371,32 @@ def drift_check(ctx: ExecutionContext, detailed: bool, format: str) -> None:
 @click.option('--remove-files', is_flag=True, help='Remove files for orphaned operations')  
 @click.option('--no-backup', is_flag=True, help='Skip backing up files before removal')
 @click.option('--preview', is_flag=True, help='Preview cleanup without applying')
+@click.option('--paths', multiple=True, help='Clean only specific paths (can be used multiple times)')
+@click.option('--operations', multiple=True, help='Clean only specific operation types (can be used multiple times)')
+@click.option('--before', type=click.DateTime(), help='Clean only operations before this date')
+@click.option('--interactive', is_flag=True, help='Interactive mode - confirm each operation')
 @click.pass_obj
-def clean(ctx: ExecutionContext, orphaned_only: bool, remove_files: bool, no_backup: bool, preview: bool) -> None:
+def clean(ctx: ExecutionContext, orphaned_only: bool, remove_files: bool, no_backup: bool, 
+          preview: bool, paths: tuple, operations: tuple, before: Optional[datetime], 
+          interactive: bool) -> None:
     """Clean up configuration drift in database.
     
     This command removes orphaned operations from the database and optionally
     removes the associated files from the filesystem. Use --preview to see
     what would be cleaned without making changes.
+    
+    Selective cleanup options:
+    - --paths: Clean only specific paths (e.g., --paths ~/.zshrc --paths ~/.gitconfig)
+    - --operations: Clean only specific operation types (e.g., --operations link --operations copy)
+    - --before: Clean operations before a specific date
+    - --interactive: Confirm each operation individually
     """
     logger = logging.getLogger(__name__)
     
     try:
+        # Check if enhanced cleanup should be used
+        use_enhanced = bool(paths or operations or before or interactive)
+        
         # Load config and detect drift
         loader = ConfigLoader(ctx.config_path)
         config = loader.load()
@@ -400,36 +416,111 @@ def clean(ctx: ExecutionContext, orphaned_only: bool, remove_files: bool, no_bac
                 console.print("[green]✓[/green] No cleanup needed")
                 return
             
-            # Show what will be cleaned
-            console.print(f"[bold]Cleanup Analysis[/bold]")
-            console.print(f"  Operations to clean: {len(to_clean)}")
-            console.print(f"  Remove files: {'Yes' if remove_files else 'No'}")
-            console.print(f"  Backup files: {'No' if no_backup else 'Yes'}")
-            console.print(f"  Orphaned only: {'Yes' if orphaned_only else 'No'}")
-            console.print()
-            
-            if preview:
-                console.print("[yellow]PREVIEW MODE - No changes will be made[/yellow]\n")
-                _display_cleanup_plan(to_clean, remove_files)
-                return
-            
-            # Confirm unless forced or dry-run
-            if not ctx.force:
-                console.print("[bold yellow]⚠ WARNING:[/bold yellow] This will modify your database and potentially remove files.")
-                console.print("Make sure you have backups before proceeding.\n")
-                if not click.confirm("Proceed with cleanup?"):
-                    console.print("[yellow]Cleanup cancelled[/yellow]")
+            # Use enhanced cleanup if filters are provided
+            if use_enhanced:
+                from dotfiles_sync.cleanup_enhanced import (
+                    EnhancedOrphanedOperationCleaner, 
+                    CleanupFilters
+                )
+                
+                # Create filters
+                filters = CleanupFilters(
+                    paths=list(paths) if paths else None,
+                    operations=list(operations) if operations else None,
+                    before=before,
+                    interactive=interactive,
+                    variant=ctx.variant
+                )
+                
+                # Show what will be cleaned
+                console.print(f"[bold]Enhanced Cleanup Analysis[/bold]")
+                console.print(f"  Operations to evaluate: {len(to_clean)}")
+                if filters.paths:
+                    console.print(f"  Path filters: {', '.join(filters.paths)}")
+                if filters.operations:
+                    console.print(f"  Operation filters: {', '.join(filters.operations)}")
+                if filters.before:
+                    console.print(f"  Before date: {filters.before}")
+                console.print(f"  Interactive mode: {'Yes' if interactive else 'No'}")
+                console.print(f"  Remove files: {'Yes' if remove_files else 'No'}")
+                console.print(f"  Backup files: {'No' if no_backup else 'Yes'}")
+                console.print()
+                
+                if preview:
+                    console.print("[yellow]PREVIEW MODE - No changes will be made[/yellow]\n")
+                    _display_cleanup_plan(to_clean, remove_files)
                     return
-            
-            # Perform cleanup
-            console.print("[bold]Performing cleanup...[/bold]\n")
-            cleaner = OrphanedOperationCleaner(db)
-            result = cleaner.clean_operations(
-                to_clean,
-                remove_files=remove_files,
-                backup=not no_backup,
-                dry_run=ctx.dry_run
-            )
+                
+                # Confirm unless forced or dry-run
+                if not ctx.force and not interactive:
+                    console.print("[bold yellow]⚠ WARNING:[/bold yellow] This will modify your database and potentially remove files.")
+                    console.print("Make sure you have backups before proceeding.\n")
+                    if not click.confirm("Proceed with cleanup?"):
+                        console.print("[yellow]Cleanup cancelled[/yellow]")
+                        return
+                
+                # Perform enhanced cleanup
+                console.print("[bold]Performing enhanced cleanup...[/bold]\n")
+                enhanced_cleaner = EnhancedOrphanedOperationCleaner(db)
+                result = enhanced_cleaner.clean_operations_selective(
+                    to_clean,
+                    filters=filters,
+                    remove_files=remove_files,
+                    backup=not no_backup,
+                    dry_run=ctx.dry_run
+                )
+                
+                # Display enhanced results
+                if result.success:
+                    console.print(f"[green]✓[/green] Successfully cleaned {result.cleaned_count} operations")
+                    if result.orphaned_operations:
+                        console.print(f"  Stored for restoration: {len(result.orphaned_operations)} operations")
+                else:
+                    console.print(f"[yellow]⚠[/yellow] Cleaned {result.cleaned_count} operations with {result.failed_count} failures")
+                
+                if result.backed_up_files:
+                    console.print(f"  Backed up: {len(result.backed_up_files)} files")
+                
+                if result.removed_files:
+                    console.print(f"  [red]Removed: {len(result.removed_files)} files[/red]")
+                
+                if result.errors:
+                    console.print(f"\n[red]Errors ({len(result.errors)}):[/red]")
+                    for error in result.errors:
+                        console.print(f"  • {error}")
+                    sys.exit(1)
+            else:
+                # Use standard cleanup
+                # Show what will be cleaned
+                console.print(f"[bold]Cleanup Analysis[/bold]")
+                console.print(f"  Operations to clean: {len(to_clean)}")
+                console.print(f"  Remove files: {'Yes' if remove_files else 'No'}")
+                console.print(f"  Backup files: {'No' if no_backup else 'Yes'}")
+                console.print(f"  Orphaned only: {'Yes' if orphaned_only else 'No'}")
+                console.print()
+                
+                if preview:
+                    console.print("[yellow]PREVIEW MODE - No changes will be made[/yellow]\n")
+                    _display_cleanup_plan(to_clean, remove_files)
+                    return
+                
+                # Confirm unless forced or dry-run
+                if not ctx.force:
+                    console.print("[bold yellow]⚠ WARNING:[/bold yellow] This will modify your database and potentially remove files.")
+                    console.print("Make sure you have backups before proceeding.\n")
+                    if not click.confirm("Proceed with cleanup?"):
+                        console.print("[yellow]Cleanup cancelled[/yellow]")
+                        return
+                
+                # Perform cleanup
+                console.print("[bold]Performing cleanup...[/bold]\n")
+                cleaner = OrphanedOperationCleaner(db)
+                result = cleaner.clean_operations(
+                    to_clean,
+                    remove_files=remove_files,
+                    backup=not no_backup,
+                    dry_run=ctx.dry_run
+                )
             
             # Display results
             if result.success:
@@ -981,6 +1072,105 @@ def backup_restore(ctx: click.Context, backup_id: str) -> None:
     except Exception as e:
         console.print(f"[red]✗[/red] Backup restore failed: {e}")
         logger.exception("Backup restore failed")
+        sys.exit(1)
+
+
+@cli.command('restore-orphaned')
+@click.option('--transaction-id', help='Restore all operations from a specific cleanup transaction')
+@click.option('--operation-ids', multiple=True, type=int, help='Specific orphaned operation IDs to restore')
+@click.option('--preview', is_flag=True, help='Preview restoration without applying')
+@click.option('--list', 'list_orphaned', is_flag=True, help='List restorable orphaned operations')
+@click.pass_obj
+def restore_orphaned(ctx: ExecutionContext, transaction_id: Optional[str], 
+                      operation_ids: tuple, preview: bool, list_orphaned: bool) -> None:
+    """Restore previously cleaned/orphaned operations.
+    
+    This command restores operations that were previously cleaned using the
+    enhanced cleanup feature. Operations can be restored by:
+    - Transaction ID: Restore all operations from a specific cleanup transaction
+    - Operation IDs: Restore specific orphaned operations by their IDs
+    - Interactive: List available operations and select which to restore
+    """
+    logger = logging.getLogger(__name__)
+    
+    try:
+        from dotfiles_sync.cleanup_enhanced import EnhancedOrphanedOperationCleaner
+        
+        with StateDatabase() as db:
+            cleaner = EnhancedOrphanedOperationCleaner(db)
+            
+            # List mode - show restorable operations
+            if list_orphaned:
+                console.print("[bold]Restorable Orphaned Operations[/bold]\n")
+                
+                # Query orphaned operations
+                cursor = db.conn.cursor()
+                cursor.execute("""
+                    SELECT id, dst_path, operation_type, orphaned_at, 
+                           orphaned_by_transaction, orphaned_reason
+                    FROM orphaned_operations
+                    WHERE restored_at IS NULL
+                    ORDER BY orphaned_at DESC
+                    LIMIT 50
+                """)
+                
+                operations = cursor.fetchall()
+                if not operations:
+                    console.print("[yellow]No restorable operations found[/yellow]")
+                    return
+                
+                console.print(f"Found {len(operations)} restorable operation(s):\n")
+                for op in operations:
+                    op_id, dst_path, op_type, orphaned_at, tx_id, reason = op
+                    console.print(f"  [green]{op_id}[/green]: {dst_path}")
+                    console.print(f"    Type: {op_type}")
+                    console.print(f"    Orphaned: {orphaned_at}")
+                    console.print(f"    Transaction: {tx_id[:8]}...")
+                    console.print(f"    Reason: {reason}")
+                    console.print()
+                
+                console.print("\n[dim]Use --operation-ids to restore specific operations[/dim]")
+                console.print("[dim]Use --transaction-id to restore all from a transaction[/dim]")
+                return
+            
+            # Validate input
+            if not transaction_id and not operation_ids:
+                console.print("[yellow]![/yellow] Specify --transaction-id or --operation-ids")
+                console.print("Use --list to see restorable operations")
+                return
+            
+            # Preview or execute restoration
+            if preview:
+                console.print("[yellow]PREVIEW MODE - No changes will be made[/yellow]\n")
+            
+            result = cleaner.restore_orphaned_operations(
+                transaction_id=transaction_id,
+                operation_ids=list(operation_ids) if operation_ids else None,
+                dry_run=preview or ctx.dry_run
+            )
+            
+            # Display results
+            if result.success:
+                console.print(f"[green]✓[/green] Successfully restored {result.restored_count} operations")
+                if result.restored_files:
+                    console.print("\nRestored files:")
+                    for file in result.restored_files:
+                        console.print(f"  • {file}")
+            else:
+                console.print(f"[yellow]⚠[/yellow] Restored {result.restored_count} operations with {result.failed_count} failures")
+                
+            if result.errors:
+                console.print(f"\n[red]Errors ({len(result.errors)}):[/red]")
+                for error in result.errors:
+                    console.print(f"  • {error}")
+                sys.exit(1)
+            
+            if preview and result.restored_count > 0:
+                console.print("\n[yellow]ℹ[/yellow] This was a preview. To apply restoration, run without --preview")
+    
+    except Exception as e:
+        console.print(f"[red]✗[/red] Restoration failed: {e}")
+        logger.exception("Restoration failed")
         sys.exit(1)
 
 
