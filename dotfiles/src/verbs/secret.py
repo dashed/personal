@@ -7,7 +7,6 @@ with support for multiple secret providers and no secret logging.
 
 import os
 import subprocess
-import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -62,8 +61,12 @@ class SecretVerb(Verb):
                 errors.append(error)
 
         # Get secret provider from security config
-        security_config = context.execution_context.config.security if context.execution_context.config else None
-        provider = security_config.secret_provider if security_config else SecretProvider.ENVIRONMENT
+        security_config = (
+            context.execution_context.config.security if context.execution_context.config else None
+        )
+        provider = (
+            security_config.secret_provider if security_config else SecretProvider.ENVIRONMENT
+        )
 
         # Validate provider availability
         if not self._is_provider_available(provider):
@@ -93,8 +96,14 @@ class SecretVerb(Verb):
                 )
 
             # Get secret provider
-            security_config = context.execution_context.config.security if context.execution_context.config else None
-            provider = security_config.secret_provider if security_config else SecretProvider.ENVIRONMENT
+            security_config = (
+                context.execution_context.config.security
+                if context.execution_context.config
+                else None
+            )
+            provider = (
+                security_config.secret_provider if security_config else SecretProvider.ENVIRONMENT
+            )
 
             # Create backup if destination exists
             backup_path = None
@@ -116,7 +125,7 @@ class SecretVerb(Verb):
             # Create parent directories if needed
             if step.create_parent_dirs and dst_path.parent:
                 dst_path.parent.mkdir(parents=True, exist_ok=True)
-                
+
                 # Set parent directory permissions if specified
                 if step.parent_dir_mode:
                     try:
@@ -126,7 +135,7 @@ class SecretVerb(Verb):
                         self.logger.warning(f"Failed to set parent directory permissions: {e}")
 
             # Write secret to file
-            dst_path.write_text(secret_value, encoding='utf-8')
+            dst_path.write_text(secret_value, encoding="utf-8")
 
             # Set secure file permissions (600 by default, or as specified)
             file_mode = step.mode or "0600"  # Default to owner read/write only
@@ -138,8 +147,7 @@ class SecretVerb(Verb):
 
             # Prepare rollback data (no secrets included)
             rollback_data = self._prepare_rollback_data(
-                step, context, backup_path=backup_path,
-                original_state={"existed": original_exists}
+                step, context, backup_path=backup_path, original_state={"existed": original_exists}
             )
 
             # Success message (no secret data)
@@ -165,7 +173,9 @@ class SecretVerb(Verb):
                 message=f"Operation failed: {type(e).__name__}",
             )
 
-    def rollback(self, step: StepConfig, context: OperationContext, rollback_data: Dict[str, Any]) -> bool:
+    def rollback(
+        self, step: StepConfig, context: OperationContext, rollback_data: Dict[str, Any]
+    ) -> bool:
         """
         Rollback secret_ref operation.
 
@@ -189,6 +199,7 @@ class SecretVerb(Verb):
                 # File existed before, restore from backup
                 if backup_path_str and Path(backup_path_str).exists():
                     import shutil
+
                     shutil.copy2(backup_path_str, dst_path)
                     self.logger.info(f"Restored {dst_path} from backup")
                 else:
@@ -212,7 +223,7 @@ class SecretVerb(Verb):
         Perform a dry run of secret_ref operation.
 
         Args:
-            step: Step configuration  
+            step: Step configuration
             context: Operation context
 
         Returns:
@@ -239,8 +250,12 @@ class SecretVerb(Verb):
             )
 
         # Get secret provider
-        security_config = context.execution_context.config.security if context.execution_context.config else None
-        provider = security_config.secret_provider if security_config else SecretProvider.ENVIRONMENT
+        security_config = (
+            context.execution_context.config.security if context.execution_context.config else None
+        )
+        provider = (
+            security_config.secret_provider if security_config else SecretProvider.ENVIRONMENT
+        )
 
         message = f"Would retrieve secret and write to {dst_path} using {provider.value} provider"
         if dst_path.exists():
@@ -261,43 +276,43 @@ class SecretVerb(Verb):
         try:
             if provider == SecretProvider.ENVIRONMENT:
                 return True  # Environment variables are always available
-            
+
             elif provider == SecretProvider.KEYCHAIN:
                 # Check for macOS Security framework or Linux keyring
                 import platform
+
                 system = platform.system()
                 if system == "Darwin":
                     # macOS - check for security command
-                    return subprocess.run(
-                        ["which", "security"], 
-                        capture_output=True, 
-                        timeout=5
-                    ).returncode == 0
+                    return (
+                        subprocess.run(
+                            ["which", "security"], capture_output=True, timeout=5
+                        ).returncode
+                        == 0
+                    )
                 elif system == "Linux":
                     # Linux - check for keyring libraries
                     try:
-                        import keyring
+                        import keyring  # type: ignore # noqa: F401
+
                         return True
                     except ImportError:
                         return False
                 return False
-            
+
             elif provider == SecretProvider.ONEPASSWORD:
                 # Check for 1Password CLI
-                return subprocess.run(
-                    ["which", "op"], 
-                    capture_output=True, 
-                    timeout=5
-                ).returncode == 0
-            
+                return (
+                    subprocess.run(["which", "op"], capture_output=True, timeout=5).returncode == 0
+                )
+
             elif provider == SecretProvider.LASTPASS:
                 # Check for LastPass CLI
-                return subprocess.run(
-                    ["which", "lpass"], 
-                    capture_output=True, 
-                    timeout=5
-                ).returncode == 0
-            
+                return (
+                    subprocess.run(["which", "lpass"], capture_output=True, timeout=5).returncode
+                    == 0
+                )
+
             return False
 
         except Exception:
@@ -323,7 +338,7 @@ class SecretVerb(Verb):
                 return self._get_onepassword_secret(key)
             elif provider == SecretProvider.LASTPASS:
                 return self._get_lastpass_secret(key)
-            
+
             return None
 
         except Exception as e:
@@ -337,61 +352,73 @@ class SecretVerb(Verb):
     def _get_keychain_secret(self, key: str) -> Optional[str]:
         """Get secret from system keychain."""
         import platform
+
         system = platform.system()
-        
+
         try:
             if system == "Darwin":
                 # macOS keychain
-                result = subprocess.run([
-                    "security", "find-generic-password",
-                    "-s", key,  # Service name
-                    "-w"       # Output password only
-                ], capture_output=True, text=True, timeout=10)
-                
+                result = subprocess.run(
+                    [
+                        "security",
+                        "find-generic-password",
+                        "-s",
+                        key,  # Service name
+                        "-w",  # Output password only
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+
                 if result.returncode == 0:
                     return result.stdout.strip()
-                
+
             elif system == "Linux":
                 # Linux keyring
                 try:
-                    import keyring
+                    import keyring  # type: ignore
+
                     return keyring.get_password("dotfiles", key)
                 except ImportError:
                     pass
-                    
+
         except Exception:
             pass
-            
+
         return None
 
     def _get_onepassword_secret(self, key: str) -> Optional[str]:
         """Get secret from 1Password."""
         try:
             # 1Password CLI command to get item
-            result = subprocess.run([
-                "op", "item", "get", key, "--field", "password"
-            ], capture_output=True, text=True, timeout=30)
-            
+            result = subprocess.run(
+                ["op", "item", "get", key, "--field", "password"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
             if result.returncode == 0:
                 return result.stdout.strip()
-                
+
         except Exception:
             pass
-            
+
         return None
 
     def _get_lastpass_secret(self, key: str) -> Optional[str]:
         """Get secret from LastPass."""
         try:
             # LastPass CLI command to get password
-            result = subprocess.run([
-                "lpass", "show", key, "--password"
-            ], capture_output=True, text=True, timeout=30)
-            
+            result = subprocess.run(
+                ["lpass", "show", key, "--password"], capture_output=True, text=True, timeout=30
+            )
+
             if result.returncode == 0:
                 return result.stdout.strip()
-                
+
         except Exception:
             pass
-            
+
         return None

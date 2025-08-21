@@ -174,7 +174,7 @@ fail_on_error = false
 require_confirmation = false
 
 [security]
-whitelist_paths = ["/tmp/**", "~/", "~/**"]
+whitelist_paths = ["/tmp/**", "~/", "~/**", "/tmp/test_home_e2e/**"]
 blacklist_paths = ["/etc", "/usr", "/System"]
 enable_command_whitelist = false
 

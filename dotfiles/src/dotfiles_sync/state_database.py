@@ -34,6 +34,7 @@ class StateDatabase:
         if db_path is None:
             # Check environment variable first
             import os
+
             env_db_path = os.environ.get("DOTFILES_STATE_DB")
             if env_db_path:
                 db_path = Path(env_db_path)
@@ -60,7 +61,7 @@ class StateDatabase:
         # Initialize schema if needed
         self._init_schema()
         self._update_system_info()
-        
+
         # Commit the initialization changes
         self.conn.commit()
 
@@ -126,7 +127,7 @@ class StateDatabase:
         try:
             # Start database transaction
             self.conn.execute("BEGIN")
-            
+
             # Record transaction in database
             self.conn.execute(
                 """
@@ -154,7 +155,7 @@ class StateDatabase:
             """,
                 (tx.id,),
             )
-            
+
             # Commit the transaction
             self.conn.commit()
 

@@ -6,13 +6,13 @@ variable substitution and security protections against template injection.
 """
 
 import os
-import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 try:
     from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateSyntaxError
     from jinja2.sandbox import SandboxedEnvironment
+
     JINJA2_AVAILABLE = True
 except ImportError:
     JINJA2_AVAILABLE = False
@@ -85,7 +85,7 @@ class TemplateVerb(Verb):
         if src_path and src_path.exists() and step.vars:
             try:
                 env = self._get_template_environment(src_path.parent)
-                template_content = src_path.read_text(encoding='utf-8')
+                template_content = src_path.read_text(encoding="utf-8")
                 env.from_string(template_content)
             except TemplateSyntaxError as e:
                 errors.append(f"Template syntax error in {src_path}: {e}")
@@ -123,23 +123,25 @@ class TemplateVerb(Verb):
             original_content = None
 
             if original_exists:
-                original_content = dst_path.read_text(encoding='utf-8') if dst_path.is_file() else None
+                original_content = (
+                    dst_path.read_text(encoding="utf-8") if dst_path.is_file() else None
+                )
                 backup_path = self._backup_file(dst_path, context)
 
             # Load and render template
             env = self._get_template_environment(src_path.parent)
             template = env.get_template(src_path.name)
-            
+
             # Prepare template variables
             template_vars = self._prepare_template_vars(step.vars or {}, context)
-            
+
             # Render template
             rendered_content = template.render(**template_vars)
-            
+
             # Create parent directories if needed
             if step.create_parent_dirs and dst_path.parent:
                 dst_path.parent.mkdir(parents=True, exist_ok=True)
-                
+
                 # Set parent directory permissions if specified
                 if step.parent_dir_mode:
                     try:
@@ -149,7 +151,7 @@ class TemplateVerb(Verb):
                         self.logger.warning(f"Failed to set parent directory permissions: {e}")
 
             # Write rendered content to destination
-            dst_path.write_text(rendered_content, encoding='utf-8')
+            dst_path.write_text(rendered_content, encoding="utf-8")
 
             # Set file permissions if specified
             if step.mode:
@@ -161,12 +163,14 @@ class TemplateVerb(Verb):
 
             # Prepare rollback data
             rollback_data = self._prepare_rollback_data(
-                step, context, backup_path=backup_path, 
+                step,
+                context,
+                backup_path=backup_path,
                 original_state={
                     "existed": original_exists,
                     "content": original_content,
-                    "template_vars": template_vars
-                }
+                    "template_vars": template_vars,
+                },
             )
 
             message = f"Template rendered: {src_path.name} -> {dst_path}"
@@ -190,7 +194,9 @@ class TemplateVerb(Verb):
                 message=f"Operation failed: {str(e)}",
             )
 
-    def rollback(self, step: StepConfig, context: OperationContext, rollback_data: Dict[str, Any]) -> bool:
+    def rollback(
+        self, step: StepConfig, context: OperationContext, rollback_data: Dict[str, Any]
+    ) -> bool:
         """
         Rollback template operation.
 
@@ -215,11 +221,12 @@ class TemplateVerb(Verb):
                 if backup_path_str and Path(backup_path_str).exists():
                     # Restore from backup
                     import shutil
+
                     shutil.copy2(backup_path_str, dst_path)
                     self.logger.info(f"Restored {dst_path} from backup")
                 elif original_state.get("content"):
                     # Restore from saved content
-                    dst_path.write_text(original_state["content"], encoding='utf-8')
+                    dst_path.write_text(original_state["content"], encoding="utf-8")
                     self.logger.info(f"Restored {dst_path} from saved content")
                 else:
                     self.logger.warning(f"Could not restore original content for {dst_path}")
@@ -241,7 +248,7 @@ class TemplateVerb(Verb):
         Perform a dry run of template operation.
 
         Args:
-            step: Step configuration  
+            step: Step configuration
             context: Operation context
 
         Returns:
@@ -274,13 +281,13 @@ class TemplateVerb(Verb):
             env = self._get_template_environment(src_path.parent)
             template = env.get_template(src_path.name)
             template_vars = self._prepare_template_vars(step.vars or {}, context)
-            
+
             # Test render (don't save the result)
             rendered_content = template.render(**template_vars)
-            
+
             message = f"Would render template: {src_path.name} -> {dst_path}"
             message += f" ({len(rendered_content)} characters)"
-            
+
             if dst_path.exists():
                 message += " (would overwrite existing file)"
 
@@ -309,20 +316,22 @@ class TemplateVerb(Verb):
             # Use sandboxed environment for security
             self._env = SandboxedEnvironment(
                 loader=FileSystemLoader(str(template_dir)),
-                autoescape=select_autoescape(['html', 'xml']),
+                autoescape=select_autoescape(["html", "xml"]),
                 # Security settings
                 enable_async=False,
             )
-            
+
             # Add custom filters
-            self._env.filters['basename'] = lambda path: Path(path).name
-            self._env.filters['dirname'] = lambda path: str(Path(path).parent)
-            self._env.filters['expanduser'] = lambda path: str(Path(path).expanduser())
-            self._env.filters['abspath'] = lambda path: str(Path(path).absolute())
-            
+            self._env.filters["basename"] = lambda path: Path(path).name
+            self._env.filters["dirname"] = lambda path: str(Path(path).parent)
+            self._env.filters["expanduser"] = lambda path: str(Path(path).expanduser())
+            self._env.filters["abspath"] = lambda path: str(Path(path).absolute())
+
         return self._env
 
-    def _prepare_template_vars(self, config_vars: Dict[str, Any], context: OperationContext) -> Dict[str, Any]:
+    def _prepare_template_vars(
+        self, config_vars: Dict[str, Any], context: OperationContext
+    ) -> Dict[str, Any]:
         """
         Prepare template variables by merging config vars with system info.
 
@@ -334,26 +343,28 @@ class TemplateVerb(Verb):
             Dictionary with all template variables
         """
         template_vars = {}
-        
+
         # Add system information
         system_info = context.execution_context.system_info
-        template_vars.update({
-            'platform': system_info.platform,
-            'hostname': system_info.hostname,
-            'username': system_info.username,
-            'home': str(Path.home()),
-            'variant': context.execution_context.variant,
-        })
-        
+        template_vars.update(
+            {
+                "platform": system_info.platform,
+                "hostname": system_info.hostname,
+                "username": system_info.username,
+                "home": str(Path.home()),
+                "variant": context.execution_context.variant,
+            }
+        )
+
         # Add environment variables with 'env' prefix
-        template_vars['env'] = dict(os.environ)
-        
+        template_vars["env"] = dict(os.environ)
+
         # Add configuration variables (these take precedence)
         template_vars.update(config_vars)
-        
+
         # Filter out potentially dangerous variables
         template_vars = self._sanitize_template_vars(template_vars)
-        
+
         return template_vars
 
     def _sanitize_template_vars(self, template_vars: Dict[str, Any]) -> Dict[str, Any]:
@@ -367,23 +378,32 @@ class TemplateVerb(Verb):
             Sanitized template variables
         """
         sanitized = {}
-        
+
         # List of potentially dangerous keys to exclude
         dangerous_keys = {
-            '__builtins__', '__import__', '__loader__', '__spec__',
-            'eval', 'exec', 'compile', 'open', 'file', 'input', 'raw_input'
+            "__builtins__",
+            "__import__",
+            "__loader__",
+            "__spec__",
+            "eval",
+            "exec",
+            "compile",
+            "open",
+            "file",
+            "input",
+            "raw_input",
         }
-        
+
         for key, value in template_vars.items():
             if key in dangerous_keys:
                 self.logger.warning(f"Skipping potentially dangerous template variable: {key}")
                 continue
-                
+
             # Convert values to safe types
             if isinstance(value, (str, int, float, bool, list, dict)):
                 sanitized[key] = value
             else:
                 # Convert other types to strings
                 sanitized[key] = str(value)
-        
+
         return sanitized

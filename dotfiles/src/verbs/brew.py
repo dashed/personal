@@ -6,9 +6,8 @@ version pinning, cask support, and idempotent operations.
 """
 
 import subprocess
-import json
 import shutil
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 from dotfiles_sync.models import StepConfig, OperationResult
@@ -54,8 +53,10 @@ class BrewVerb(Verb):
             errors.append("Packages must be a non-empty list")
 
         # Validate platform - Homebrew works on macOS and Linux
-        if context.execution_context.system_info.platform not in ['darwin', 'linux']:
-            errors.append(f"Homebrew not supported on platform: {context.execution_context.system_info.platform}")
+        if context.execution_context.system_info.platform not in ["darwin", "linux"]:
+            errors.append(
+                f"Homebrew not supported on platform: {context.execution_context.system_info.platform}"
+            )
 
         # Check if Homebrew is available or can be installed
         if not self._find_brew():
@@ -94,7 +95,7 @@ class BrewVerb(Verb):
                 try:
                     # Parse package specification (package@version, cask:package, etc.)
                     package_info = self._parse_package_spec(package)
-                    
+
                     # Check if already installed
                     if self._is_package_installed(package_info):
                         already_installed.append(package)
@@ -144,7 +145,9 @@ class BrewVerb(Verb):
                 message=f"Operation failed: {str(e)}",
             )
 
-    def rollback(self, step: StepConfig, context: OperationContext, rollback_data: Dict[str, Any]) -> bool:
+    def rollback(
+        self, step: StepConfig, context: OperationContext, rollback_data: Dict[str, Any]
+    ) -> bool:
         """
         Rollback brew_install operation by uninstalling packages that were installed.
 
@@ -192,7 +195,7 @@ class BrewVerb(Verb):
         Perform a dry run of brew_install operation.
 
         Args:
-            step: Step configuration  
+            step: Step configuration
             context: Operation context
 
         Returns:
@@ -221,7 +224,7 @@ class BrewVerb(Verb):
         # Check which packages would be installed
         would_install = []
         already_installed = []
-        
+
         if self._find_brew():
             for package in packages:
                 try:
@@ -261,9 +264,9 @@ class BrewVerb(Verb):
         # Common locations for brew
         possible_paths = [
             "/opt/homebrew/bin/brew",  # Apple Silicon Mac
-            "/usr/local/bin/brew",     # Intel Mac
+            "/usr/local/bin/brew",  # Intel Mac
             "/home/linuxbrew/.linuxbrew/bin/brew",  # Linux
-            shutil.which("brew"),      # In PATH
+            shutil.which("brew"),  # In PATH
         ]
 
         for path in possible_paths:
@@ -291,17 +294,18 @@ class BrewVerb(Verb):
         self.logger.info("Homebrew not found, attempting to install...")
         try:
             install_cmd = [
-                "bash", "-c",
-                "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+                "bash",
+                "-c",
+                "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)",
             ]
-            
+
             result = subprocess.run(
-                install_cmd, 
-                capture_output=True, 
-                text=True, 
-                timeout=600  # 10 minutes
+                install_cmd,
+                capture_output=True,
+                text=True,
+                timeout=600,  # 10 minutes
             )
-            
+
             if result.returncode == 0:
                 # Try to find brew again after installation
                 self.brew_path = None  # Reset cache
@@ -309,7 +313,7 @@ class BrewVerb(Verb):
             else:
                 self.logger.error(f"Homebrew installation failed: {result.stderr}")
                 return False
-                
+
         except Exception as e:
             self.logger.error(f"Error installing Homebrew: {e}")
             return False
@@ -317,7 +321,7 @@ class BrewVerb(Verb):
     def _parse_package_spec(self, package_spec: str) -> Dict[str, Any]:
         """
         Parse package specification string.
-        
+
         Supports formats:
         - package_name
         - package_name@version
@@ -329,7 +333,7 @@ class BrewVerb(Verb):
             "version": None,
             "is_cask": False,
             "tap": None,
-            "original_spec": package_spec
+            "original_spec": package_spec,
         }
 
         # Check for cask prefix
@@ -362,7 +366,7 @@ class BrewVerb(Verb):
                     [self.brew_path, "list", "--cask", package_info["name"]],
                     capture_output=True,
                     text=True,
-                    timeout=30
+                    timeout=30,
                 )
             else:
                 # Check formula installation
@@ -370,9 +374,9 @@ class BrewVerb(Verb):
                     [self.brew_path, "list", package_info["name"]],
                     capture_output=True,
                     text=True,
-                    timeout=30
+                    timeout=30,
                 )
-            
+
             return result.returncode == 0
 
         except Exception as e:
@@ -386,22 +390,24 @@ class BrewVerb(Verb):
 
         try:
             cmd = [self.brew_path, "install"]
-            
+
             if package_info["is_cask"]:
                 cmd.append("--cask")
-            
+
             # Use the original spec to preserve version/tap information
             cmd.append(package_info["original_spec"].replace("cask:", ""))
-            
-            self.logger.info(f"Installing {package_info['original_spec']} with command: {' '.join(cmd)}")
-            
+
+            self.logger.info(
+                f"Installing {package_info['original_spec']} with command: {' '.join(cmd)}"
+            )
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=600  # 10 minutes per package
+                timeout=600,  # 10 minutes per package
             )
-            
+
             if result.returncode == 0:
                 self.logger.info(f"Successfully installed {package_info['name']}")
                 return True
@@ -423,19 +429,19 @@ class BrewVerb(Verb):
 
         try:
             cmd = [self.brew_path, "uninstall"]
-            
+
             if package_info["is_cask"]:
                 cmd.append("--cask")
-            
+
             cmd.append(package_info["name"])
-            
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minutes
+                timeout=300,  # 5 minutes
             )
-            
+
             return result.returncode == 0
 
         except Exception as e:

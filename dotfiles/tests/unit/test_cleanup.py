@@ -6,7 +6,6 @@ This module tests the OrphanedOperationCleaner class and related cleanup operati
 """
 
 import tempfile
-import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -18,7 +17,6 @@ from dotfiles_sync.config_drift import (
     ConfigDriftType,
     ConfigDriftSeverity,
 )
-from dotfiles_sync.models import TransactionContext
 from dotfiles_sync.state_database import StateDatabase
 
 
@@ -73,16 +71,16 @@ class TestOrphanedOperationCleaner:
     def mock_database(self):
         """Create a mock database."""
         db = MagicMock(spec=StateDatabase)
-        
+
         # Mock transaction context manager
         mock_tx = MagicMock()
         mock_tx.id = "test-tx-id"
         db.transaction.return_value.__enter__.return_value = mock_tx
         db.transaction.return_value.__exit__.return_value = None
-        
+
         # Mock database methods
         db.mark_operations_as_orphaned.return_value = 1
-        
+
         return db
 
     @pytest.fixture
@@ -121,7 +119,7 @@ class TestOrphanedOperationCleaner:
     def test_clean_operations_empty_list(self, cleaner):
         """Test cleaning with empty operations list."""
         result = cleaner.clean_operations([])
-        
+
         assert result.cleaned_count == 0
         assert result.failed_count == 0
         assert result.success
@@ -132,7 +130,7 @@ class TestOrphanedOperationCleaner:
     def test_clean_operations_dry_run(self, cleaner, sample_orphaned_operations):
         """Test cleaning operations in dry run mode."""
         result = cleaner.clean_operations(sample_orphaned_operations, dry_run=True)
-        
+
         assert result.cleaned_count == 2
         assert result.failed_count == 0
         assert result.success
@@ -144,18 +142,20 @@ class TestOrphanedOperationCleaner:
         result = cleaner.clean_operations(
             sample_orphaned_operations, remove_files=False, backup=False
         )
-        
+
         assert result.cleaned_count == 2
         assert result.failed_count == 0
         assert result.success
         assert result.backed_up_files == []
         assert result.removed_files == []
-        
+
         # Should mark operations as orphaned
         assert cleaner.database.mark_operations_as_orphaned.call_count == 2
 
     @patch("dotfiles_sync.cleanup.Path")
-    def test_clean_operations_with_file_removal(self, mock_path, cleaner, sample_orphaned_operations):
+    def test_clean_operations_with_file_removal(
+        self, mock_path, cleaner, sample_orphaned_operations
+    ):
         """Test cleaning operations with file removal."""
         # Mock file exists and removal
         mock_file = MagicMock()
@@ -165,16 +165,16 @@ class TestOrphanedOperationCleaner:
         mock_file.is_dir.return_value = False
         mock_file.expanduser.return_value = mock_file
         mock_path.return_value = mock_file
-        
+
         result = cleaner.clean_operations(
             sample_orphaned_operations, remove_files=True, backup=False
         )
-        
+
         assert result.cleaned_count == 2
         assert result.failed_count == 0
         assert result.success
         assert len(result.removed_files) == 2
-        
+
         # Should have called unlink for each file
         assert mock_file.unlink.call_count == 2
 
@@ -193,7 +193,7 @@ class TestOrphanedOperationCleaner:
                 severity=ConfigDriftSeverity.WARNING,
             )
         ]
-        
+
         # Mock directory exists
         mock_dir = MagicMock()
         mock_dir.exists.return_value = True
@@ -202,19 +202,21 @@ class TestOrphanedOperationCleaner:
         mock_dir.is_dir.return_value = True
         mock_dir.expanduser.return_value = mock_dir
         mock_path.return_value = mock_dir
-        
+
         result = cleaner.clean_operations(operations, remove_files=True, backup=False)
-        
+
         assert result.cleaned_count == 1
         assert result.success
         assert len(result.removed_files) == 1
-        
+
         # Should have called rmtree for directory
         mock_shutil.rmtree.assert_called_once_with(mock_dir)
 
     @patch("dotfiles_sync.cleanup.Path")
     @patch("dotfiles_sync.cleanup.shutil")
-    def test_clean_operations_with_backup(self, mock_shutil, mock_path, cleaner, sample_orphaned_operations):
+    def test_clean_operations_with_backup(
+        self, mock_shutil, mock_path, cleaner, sample_orphaned_operations
+    ):
         """Test cleaning operations with backup."""
         # Mock file exists and backup operations
         mock_file = MagicMock()
@@ -222,12 +224,12 @@ class TestOrphanedOperationCleaner:
         mock_file.is_file.return_value = True
         mock_file.name = "test_file"
         mock_file.expanduser.return_value = mock_file
-        
+
         # Mock backup directory and path
         mock_backup_dir = MagicMock()
         mock_backup_path = MagicMock()
         mock_backup_path.parent = mock_backup_dir
-        
+
         def path_side_effect(*args):
             if "backups" in str(args[0]):
                 return mock_backup_dir
@@ -235,14 +237,14 @@ class TestOrphanedOperationCleaner:
                 return mock_file
             else:
                 return mock_backup_path
-        
+
         mock_path.side_effect = path_side_effect
         mock_path.home.return_value = MagicMock()
-        
+
         result = cleaner.clean_operations(
             sample_orphaned_operations, remove_files=True, backup=True
         )
-        
+
         assert result.cleaned_count == 2
         assert result.success
         # Should have created backups (mocked, so can't verify exact count)
@@ -250,18 +252,19 @@ class TestOrphanedOperationCleaner:
 
     def test_clean_operations_with_failures(self, cleaner, sample_orphaned_operations):
         """Test cleaning operations when some fail."""
+
         # Mock database to fail for one operation
         def mock_mark_orphaned(hashes, tx_id):
             if "hash1" in hashes:
                 raise Exception("Database error")
             return 1
-        
+
         cleaner.database.mark_operations_as_orphaned.side_effect = mock_mark_orphaned
-        
+
         result = cleaner.clean_operations(sample_orphaned_operations)
-        
+
         assert result.cleaned_count == 1  # One successful
-        assert result.failed_count == 1   # One failed
+        assert result.failed_count == 1  # One failed
         assert not result.success
         assert len(result.errors) == 1
         assert "Database error" in result.errors[0]
@@ -272,7 +275,7 @@ class TestOrphanedOperationCleaner:
             mock_file = MagicMock()
             mock_file.exists.return_value = False
             mock_path.return_value.expanduser.return_value = mock_file
-            
+
             backup_path = cleaner._backup_file("/nonexistent/file", "test")
             assert backup_path is None
 
@@ -289,21 +292,21 @@ class TestOrphanedOperationCleaner:
         mock_file.name = "test_file"
         mock_file.expanduser.return_value = mock_file
         mock_file.relative_to.side_effect = ValueError()  # Force flat structure
-        
+
         # Mock backup directory and path
         mock_backup_dir = MagicMock()
         mock_backup_path = MagicMock()
-        
+
         # Configure Path to return the file for the input path
         mock_path.return_value = mock_file
         mock_path.home.return_value = MagicMock()
-        
+
         # Mock the backup directory creation chain
         mock_path.home.return_value.__truediv__.return_value.__truediv__.return_value.__truediv__.return_value.__truediv__.return_value = mock_backup_dir
         mock_backup_dir.__truediv__.return_value = mock_backup_path
-        
+
         backup_path = cleaner._backup_file("/tmp/test_file", "test reason")
-        
+
         assert backup_path is not None
         mock_shutil.copy2.assert_called_once()
         # Don't assert on mkdir since the path mocking is complex
@@ -314,7 +317,7 @@ class TestOrphanedOperationCleaner:
             mock_file = MagicMock()
             mock_file.exists.return_value = False
             mock_path.return_value.expanduser.return_value = mock_file
-            
+
             removed_path = cleaner._remove_file("/nonexistent/file")
             assert removed_path is None
 
@@ -328,16 +331,16 @@ class TestOrphanedOperationCleaner:
         mock_file.is_dir.return_value = False
         mock_file.expanduser.return_value = mock_file
         mock_path.return_value = mock_file
-        
+
         removed_path = cleaner._remove_file("/tmp/test_file")
-        
+
         assert removed_path is not None
         mock_file.unlink.assert_called_once()
 
     def test_preview_cleanup(self, cleaner, sample_orphaned_operations):
         """Test generating cleanup preview."""
         preview = cleaner.preview_cleanup(sample_orphaned_operations, remove_files=True)
-        
+
         assert "Cleanup Plan for 2 operations" in preview
         assert "/tmp/test_file1" in preview
         assert "/tmp/test_file2" in preview
@@ -362,11 +365,11 @@ class TestOrphanedOperationCleaner:
                     mock_file.exists.return_value = False
                 mock_file.expanduser.return_value = mock_file
                 return mock_file
-            
+
             mock_path.side_effect = path_side_effect
-            
+
             stats = cleaner.get_cleanup_statistics(sample_orphaned_operations)
-            
+
             assert stats["total_operations"] == 2
             assert stats["orphaned"] == 2
             assert stats["modified"] == 0
@@ -377,7 +380,7 @@ class TestOrphanedOperationCleaner:
     def test_get_cleanup_statistics_empty(self, cleaner):
         """Test getting statistics for empty operations list."""
         stats = cleaner.get_cleanup_statistics([])
-        
+
         assert stats["total_operations"] == 0
         assert stats["orphaned"] == 0
         assert stats["modified"] == 0
@@ -393,31 +396,35 @@ class TestOrphanedOperationCleaner:
             impact="Operation no longer in configuration",
             severity=ConfigDriftSeverity.WARNING,
         )
-        
+
         result = CleanupResult()
         cleaner._clean_single_operation(operation, False, False, result, "tx-123")
-        
+
         # Should still increment cleaned count but skip database operation
         assert result.cleaned_count == 1
         cleaner.database.mark_operations_as_orphaned.assert_not_called()
 
     @patch("dotfiles_sync.cleanup.uuid.uuid4")
-    def test_clean_operations_generates_transaction_id(self, mock_uuid, cleaner, sample_orphaned_operations):
+    def test_clean_operations_generates_transaction_id(
+        self, mock_uuid, cleaner, sample_orphaned_operations
+    ):
         """Test that transaction ID is generated when not provided."""
         mock_uuid.return_value = MagicMock()
         mock_uuid.return_value.__str__.return_value = "generated-tx-id"
-        
+
         result = cleaner.clean_operations(sample_orphaned_operations)
-        
+
         assert result.transaction_id == "generated-tx-id"
         mock_uuid.assert_called_once()
 
-    def test_clean_operations_uses_provided_transaction_id(self, cleaner, sample_orphaned_operations):
+    def test_clean_operations_uses_provided_transaction_id(
+        self, cleaner, sample_orphaned_operations
+    ):
         """Test that provided transaction ID is used."""
         provided_tx_id = "custom-tx-id"
-        
+
         result = cleaner.clean_operations(sample_orphaned_operations, transaction_id=provided_tx_id)
-        
+
         assert result.transaction_id == provided_tx_id
 
 
@@ -429,7 +436,7 @@ class TestCleanupIntegration:
         """Create a temporary database for testing."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
-        
+
         try:
             with StateDatabase(db_path=db_path) as db:
                 yield db
@@ -448,11 +455,11 @@ class TestCleanupIntegration:
             )
             temp_db.record_applied_step(
                 tx,
-                "copy", 
+                "copy",
                 {"op": "copy", "src": "test", "dst": "/tmp/test2"},
                 dst_path="/tmp/test2",
             )
-        
+
         # Create operations to clean
         operations = [
             ConfigDriftResult(
@@ -464,11 +471,11 @@ class TestCleanupIntegration:
                 severity=ConfigDriftSeverity.WARNING,
             )
         ]
-        
+
         # Perform cleanup
         cleaner = OrphanedOperationCleaner(temp_db)
         result = cleaner.clean_operations(operations, remove_files=False, backup=False)
-        
+
         # Should succeed even if hash doesn't match (marks as orphaned)
         assert result.cleaned_count == 1
         assert result.failed_count == 0

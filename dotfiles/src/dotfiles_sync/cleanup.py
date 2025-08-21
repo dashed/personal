@@ -145,11 +145,15 @@ class OrphanedOperationCleaner:
 
         # Mark operation as orphaned in database
         if op.applied_step_hash:
-            affected = self.database.mark_operations_as_orphaned([op.applied_step_hash], transaction_id)
+            affected = self.database.mark_operations_as_orphaned(
+                [op.applied_step_hash], transaction_id
+            )
             if affected > 0:
                 self.logger.debug(f"Marked {affected} operations as orphaned for {op.dst_path}")
         else:
-            self.logger.warning(f"No applied step hash for {op.dst_path}, skipping database cleanup")
+            self.logger.warning(
+                f"No applied step hash for {op.dst_path}, skipping database cleanup"
+            )
 
         # Remove file if requested
         if remove_files and op.dst_path:
@@ -243,7 +247,9 @@ class OrphanedOperationCleaner:
             self.logger.error(f"Failed to remove {dst_path}: {e}")
             return None
 
-    def preview_cleanup(self, operations: List[ConfigDriftResult], remove_files: bool = False) -> str:
+    def preview_cleanup(
+        self, operations: List[ConfigDriftResult], remove_files: bool = False
+    ) -> str:
         """
         Generate a preview of what cleanup would do.
 
@@ -261,17 +267,17 @@ class OrphanedOperationCleaner:
 
         for op in operations:
             action = f"  • {op.dst_path} ({op.operation_type})"
-            
+
             if op.drift_type == ConfigDriftType.ORPHANED:
                 action += " - Remove from database (orphaned)"
             elif op.drift_type == ConfigDriftType.MODIFIED:
                 action += " - Reset database state (modified)"
-            
+
             if remove_files and op.dst_path:
                 file_path = Path(op.dst_path).expanduser()
                 if file_path.exists():
-                    action += f" + DELETE FILE"
-            
+                    action += " + DELETE FILE"
+
             lines.append(action)
 
         return "\n".join(lines)

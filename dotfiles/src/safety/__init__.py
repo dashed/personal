@@ -87,7 +87,7 @@ __all__ = [
     "ImpactAnalyzer",
     "DependencyAnalyzer",
     "ImpactReport",
-    "ImpactDetail", 
+    "ImpactDetail",
     "ImpactLevel",
     "ImpactType",
     # Phase 4: Confirmation components

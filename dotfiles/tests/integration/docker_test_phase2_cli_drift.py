@@ -8,7 +8,6 @@ DO NOT RUN THIS OUTSIDE OF DOCKER.
 
 import os
 import sys
-from pathlib import Path
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -22,7 +21,7 @@ require_docker()
 # Now safe to import the actual modules
 from dotfiles_sync.cli import cli  # noqa: E402
 from dotfiles_sync.state_database import StateDatabase  # noqa: E402
-from dotfiles_sync.models import TransactionContext, StepConfig, OperationType  # noqa: E402
+from dotfiles_sync.models import StepConfig, OperationType  # noqa: E402
 
 import pytest  # noqa: E402
 from click.testing import CliRunner  # noqa: E402
@@ -41,15 +40,15 @@ class TestPhase2CLIDriftIntegration:
         """Create a test directory structure."""
         test_dir = tmp_path / "dotfiles_test"
         test_dir.mkdir()
-        
+
         # Create source files
         files_dir = test_dir / "files"
         files_dir.mkdir()
-        
+
         (files_dir / "bashrc").write_text("# Test bashrc\nalias ll='ls -la'\n")
         (files_dir / "vimrc").write_text('" Test vimrc\nset number\n')
         (files_dir / "gitconfig").write_text("[user]\n  name = Test User\n")
-        
+
         return test_dir
 
     def test_drift_check_command_no_drift(self, runner, test_dir):
@@ -66,17 +65,13 @@ op = "link"
 src = "files/bashrc"
 dst = "/tmp/test_bashrc"
 """)
-        
+
         # Initialize database with applied operation
         db_path = test_dir / "test.db"
         with StateDatabase(db_path=str(db_path)) as db:
             with db.transaction("default", "test", "docker") as tx:
                 # Create a proper StepConfig to ensure hash matches
-                step = StepConfig(
-                    op=OperationType.LINK,
-                    src="files/bashrc",
-                    dst="/tmp/test_bashrc"
-                )
+                step = StepConfig(op=OperationType.LINK, src="files/bashrc", dst="/tmp/test_bashrc")
                 db.record_applied_step(
                     tx,
                     "link",
@@ -84,14 +79,14 @@ dst = "/tmp/test_bashrc"
                     src_path="files/bashrc",
                     dst_path="/tmp/test_bashrc",
                 )
-        
+
         # Run drift-check command
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "drift-check"],
-            env={"DOTFILES_STATE_DB": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)},
         )
-        
+
         assert result.exit_code == 0
         assert "No action needed" in result.output or "Total Drift: 0" in result.output
 
@@ -114,7 +109,7 @@ op = "copy"
 src = "files/vimrc"
 dst = "/tmp/test_vimrc"
 """)
-        
+
         # Initialize database with only one applied operation
         db_path = test_dir / "test.db"
         with StateDatabase(db_path=str(db_path)) as db:
@@ -126,14 +121,14 @@ dst = "/tmp/test_vimrc"
                     src_path="files/bashrc",
                     dst_path="/tmp/test_bashrc",
                 )
-        
+
         # Run drift-check command
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "drift-check"],
-            env={"DOTFILES_STATE_DB": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)},
         )
-        
+
         assert result.exit_code == 1  # Exit code 1 indicates drift exists
         assert "NEW OPERATIONS" in result.output
         assert "/tmp/test_vimrc" in result.output
@@ -152,16 +147,14 @@ op = "link"
 src = "files/bashrc"
 dst = "/tmp/test_bashrc"
 """)
-        
+
         # Initialize database with two applied operations
         db_path = test_dir / "test.db"
         with StateDatabase(db_path=str(db_path)) as db:
             with db.transaction("default", "test", "docker") as tx:
                 # Create proper StepConfig objects
                 step1 = StepConfig(
-                    op=OperationType.LINK,
-                    src="files/bashrc",
-                    dst="/tmp/test_bashrc"
+                    op=OperationType.LINK, src="files/bashrc", dst="/tmp/test_bashrc"
                 )
                 db.record_applied_step(
                     tx,
@@ -170,11 +163,7 @@ dst = "/tmp/test_bashrc"
                     src_path="files/bashrc",
                     dst_path="/tmp/test_bashrc",
                 )
-                step2 = StepConfig(
-                    op=OperationType.COPY,
-                    src="files/vimrc",
-                    dst="/tmp/test_vimrc"
-                )
+                step2 = StepConfig(op=OperationType.COPY, src="files/vimrc", dst="/tmp/test_vimrc")
                 db.record_applied_step(
                     tx,
                     "copy",
@@ -182,14 +171,14 @@ dst = "/tmp/test_bashrc"
                     src_path="files/vimrc",
                     dst_path="/tmp/test_vimrc",
                 )
-        
+
         # Run drift-check command
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "drift-check"],
-            env={"DOTFILES_STATE_DB": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)},
         )
-        
+
         assert result.exit_code == 1
         assert "ORPHANED OPERATIONS" in result.output
         assert "/tmp/test_vimrc" in result.output
@@ -208,18 +197,18 @@ op = "link"
 src = "files/bashrc"
 dst = "/tmp/test_bashrc"
 """)
-        
+
         # Initialize empty database
         db_path = test_dir / "test.db"
         StateDatabase(db_path=str(db_path)).close()
-        
+
         # Run drift-check command with JSON format
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "drift-check", "--format", "json"],
-            env={"DOTFILES_STATE_DB": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)},
         )
-        
+
         assert result.exit_code == 1
         # Verify JSON structure in output
         assert '"total_drift"' in result.output
@@ -246,7 +235,7 @@ op = "copy"
 src = "files/vimrc"
 dst = "/tmp/test_vimrc"
 """)
-        
+
         # Initialize database with one applied operation
         db_path = test_dir / "test.db"
         with StateDatabase(db_path=str(db_path)) as db:
@@ -258,14 +247,14 @@ dst = "/tmp/test_vimrc"
                     src_path="files/bashrc",
                     dst_path="/tmp/test_bashrc",
                 )
-        
+
         # Run status command with --config-drift
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "status", "--config-drift"],
-            env={"DOTFILES_STATE_DB": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)},
         )
-        
+
         assert result.exit_code == 0
         assert "System Status" in result.output
         assert "Configuration Drift" in result.output
@@ -285,7 +274,7 @@ op = "link"
 src = "files/bashrc"
 dst = "/tmp/test_bashrc"
 """)
-        
+
         # Initialize database with different operation
         db_path = test_dir / "test.db"
         with StateDatabase(db_path=str(db_path)) as db:
@@ -297,18 +286,20 @@ dst = "/tmp/test_bashrc"
                     src_path="files/old",
                     dst_path="/tmp/test_old",
                 )
-        
+
         # Run validate command with --check-database
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "validate", "--check-database"],
-            env={"DOTFILES_STATE_DB": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)},
         )
-        
+
         assert result.exit_code == 0
         assert "Configuration is valid!" in result.output
         assert "Database Validation" in result.output
-        assert "orphaned operations found" in result.output or "new operations ready" in result.output
+        assert (
+            "orphaned operations found" in result.output or "new operations ready" in result.output
+        )
 
     def test_sync_command_with_show_drift(self, runner, test_dir):
         """Test sync command with --show-drift flag."""
@@ -327,31 +318,34 @@ op = "copy"
 src = "files/bashrc"
 dst = "/tmp/test_bashrc_sync"
 """)
-        
+
         # Create the source file
         (test_dir / "files" / "bashrc").write_text("# Bashrc content\n")
-        
+
         # Initialize empty database
         db_path = test_dir / "test.db"
         StateDatabase(db_path=str(db_path)).close()
-        
+
         # Run sync command with --show-drift
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "--force", "--apply", "sync", "--show-drift"],
-            env={"DOTFILES_STATE_DB": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)},
         )
-        
+
         # Debug output if test fails
         if result.exit_code != 0:
             print(f"Exit code: {result.exit_code}")
             print(f"Output: {result.output}")
             if result.exception:
                 print(f"Exception: {result.exception}")
-        
+
         assert result.exit_code == 0
         assert "Pre-sync Drift Analysis" in result.output
-        assert "Configuration drift detected" in result.output or "No configuration drift" in result.output
+        assert (
+            "Configuration drift detected" in result.output
+            or "No configuration drift" in result.output
+        )
         assert "Results Summary" in result.output
 
     def test_drift_check_detailed_output(self, runner, test_dir):
@@ -369,7 +363,7 @@ src = "files/bashrc"
 dst = "/tmp/test_bashrc"
 mode = "0644"
 """)
-        
+
         # Initialize database with same destination but different config
         db_path = test_dir / "test.db"
         with StateDatabase(db_path=str(db_path)) as db:
@@ -381,14 +375,14 @@ mode = "0644"
                     src_path="files/bashrc_old",
                     dst_path="/tmp/test_bashrc",
                 )
-        
+
         # Run drift-check command with --detailed
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "drift-check", "--detailed"],
-            env={"DOTFILES_STATE_DB": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)},
         )
-        
+
         assert result.exit_code == 1
         assert "Details for" in result.output or "Config:" in result.output
 
@@ -419,26 +413,26 @@ src = "files/gitconfig"
 dst = "/tmp/test_gitconfig"
 variants = ["work"]
 """)
-        
+
         # Initialize empty database
         db_path = test_dir / "test.db"
         StateDatabase(db_path=str(db_path)).close()
-        
+
         # Test default variant
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "--variant", "default", "drift-check"],
-            env={"DOTFILES_STATE_DB": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)},
         )
         assert result.exit_code == 1
         assert "/tmp/test_bashrc" in result.output
         assert "/tmp/test_vimrc" not in result.output
-        
+
         # Test personal variant
         result = runner.invoke(
             cli,
             ["--config", str(config_path), "--variant", "personal", "drift-check"],
-            env={"DOTFILES_STATE_DB": str(db_path)}
+            env={"DOTFILES_STATE_DB": str(db_path)},
         )
         assert result.exit_code == 1
         assert "/tmp/test_vimrc" in result.output
@@ -448,6 +442,6 @@ variants = ["work"]
 if __name__ == "__main__":
     # Ensure we're in Docker
     require_docker()
-    
+
     # Run tests
     pytest.main([__file__, "-v"])

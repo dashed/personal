@@ -19,7 +19,7 @@ from dotfiles_sync.config import ConfigLoader, ConfigValidationError
 from dotfiles_sync.context import ExecutionContext
 from dotfiles_sync.database import StateDatabase
 from dotfiles_sync.config_drift import ConfigDriftDetector, ConfigDriftType, ConfigDriftSummary
-from dotfiles_sync.cleanup import OrphanedOperationCleaner, CleanupResult
+from dotfiles_sync.cleanup import OrphanedOperationCleaner
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from verbs import OperationExecutor
@@ -41,32 +41,34 @@ def _display_drift_table(drift_summary: ConfigDriftSummary, detailed: bool = Fal
     """Display configuration drift in a formatted table."""
     from rich.table import Table
     from rich.panel import Panel
-    
+
     # Create header panel
-    header_text = f"[bold]Configuration Drift Report[/bold]\n"
+    header_text = "[bold]Configuration Drift Report[/bold]\n"
     header_text += f"Variant: {drift_summary.checked_variant}\n"
     header_text += f"Total Drift: {drift_summary.total_drift} operations"
-    
+
     console.print(Panel(header_text, title="Drift Analysis", border_style="blue"))
-    
+
     # Display orphaned operations
     if drift_summary.orphaned_operations:
-        console.print("\n[bold yellow]⚠ ORPHANED OPERATIONS[/bold yellow] (in database but not in config):")
+        console.print(
+            "\n[bold yellow]⚠ ORPHANED OPERATIONS[/bold yellow] (in database but not in config):"
+        )
         table = Table(show_header=True, header_style="bold")
         table.add_column("Path", style="cyan")
         table.add_column("Type", style="magenta")
         table.add_column("Impact", style="yellow")
-        
+
         for op in drift_summary.orphaned_operations:
             table.add_row(op.dst_path, op.operation_type, op.impact)
-        
+
         console.print(table)
-        
+
         if detailed:
             for op in drift_summary.orphaned_operations:
                 console.print(f"\n  Details for {op.dst_path}:")
                 console.print(f"    Applied config: {op.applied_config}")
-    
+
     # Display modified operations
     if drift_summary.modified_operations:
         console.print("\n[bold blue]🔄 MODIFIED OPERATIONS[/bold blue] (configuration changed):")
@@ -74,36 +76,38 @@ def _display_drift_table(drift_summary: ConfigDriftSummary, detailed: bool = Fal
         table.add_column("Path", style="cyan")
         table.add_column("Type", style="magenta")
         table.add_column("Change", style="blue")
-        
+
         for op in drift_summary.modified_operations:
             table.add_row(op.dst_path, op.operation_type, op.impact)
-        
+
         console.print(table)
-        
+
         if detailed:
             for op in drift_summary.modified_operations:
                 console.print(f"\n  Details for {op.dst_path}:")
                 console.print(f"    Old config: {op.applied_config}")
                 console.print(f"    New config: {op.current_config}")
-    
+
     # Display new operations
     if drift_summary.new_operations:
-        console.print("\n[bold green]✨ NEW OPERATIONS[/bold green] (in config but not yet applied):")
+        console.print(
+            "\n[bold green]✨ NEW OPERATIONS[/bold green] (in config but not yet applied):"
+        )
         table = Table(show_header=True, header_style="bold")
         table.add_column("Path", style="cyan")
         table.add_column("Type", style="magenta")
         table.add_column("Action", style="green")
-        
+
         for op in drift_summary.new_operations:
             table.add_row(op.dst_path, op.operation_type, op.impact)
-        
+
         console.print(table)
-        
+
         if detailed:
             for op in drift_summary.new_operations:
                 console.print(f"\n  Details for {op.dst_path}:")
                 console.print(f"    Config: {op.current_config}")
-    
+
     # Display recommendation
     if drift_summary.recommended_action:
         console.print(f"\n[bold]Recommendation:[/bold] {drift_summary.recommended_action}")
@@ -114,32 +118,34 @@ def _display_drift_summary(drift_summary: ConfigDriftSummary) -> None:
     if drift_summary.total_drift == 0:
         console.print("[green]✓[/green] No configuration drift detected")
     else:
-        console.print(f"[yellow]⚠[/yellow] Configuration drift detected: {drift_summary.total_drift} operations")
+        console.print(
+            f"[yellow]⚠[/yellow] Configuration drift detected: {drift_summary.total_drift} operations"
+        )
         if drift_summary.orphaned_operations:
             console.print(f"  Orphaned: {len(drift_summary.orphaned_operations)}")
         if drift_summary.modified_operations:
             console.print(f"  Modified: {len(drift_summary.modified_operations)}")
         if drift_summary.new_operations:
             console.print(f"  New: {len(drift_summary.new_operations)}")
-        console.print(f"\n  Run 'dotfiles-sync drift-check --detailed' for full report")
+        console.print("\n  Run 'dotfiles-sync drift-check --detailed' for full report")
 
 
 def _display_cleanup_plan(operations: list, remove_files: bool = False) -> None:
     """Display what cleanup operations would be performed."""
     from rich.table import Table
     from rich.panel import Panel
-    
+
     if not operations:
         console.print(Panel("[green]No operations need cleanup[/green]", title="Cleanup Plan"))
         return
-    
+
     # Create cleanup plan table
     table = Table(show_header=True, header_style="bold")
     table.add_column("Path", style="cyan")
     table.add_column("Type", style="magenta")
     table.add_column("Action", style="yellow")
     table.add_column("Files", style="red" if remove_files else "dim")
-    
+
     for op in operations:
         # Determine action based on drift type
         action = "Remove from DB"
@@ -147,7 +153,7 @@ def _display_cleanup_plan(operations: list, remove_files: bool = False) -> None:
             action = "Mark as orphaned"
         elif op.drift_type == ConfigDriftType.MODIFIED:
             action = "Reset state"
-        
+
         # Check file status
         file_status = "—"
         if remove_files and op.dst_path:
@@ -161,19 +167,20 @@ def _display_cleanup_plan(operations: list, remove_files: bool = False) -> None:
                     file_status = "DELETE file"
             else:
                 file_status = "File not found"
-        
+
         table.add_row(op.dst_path, op.operation_type, action, file_status)
-    
+
     console.print(table)
 
 
-def _display_reconciliation_plan(drift_summary: ConfigDriftSummary, remove_files: bool = False) -> None:
+def _display_reconciliation_plan(
+    drift_summary: ConfigDriftSummary, remove_files: bool = False
+) -> None:
     """Display the complete reconciliation plan."""
-    from rich.table import Table
     from rich.panel import Panel
-    
+
     plan_text = f"[bold]Reconciliation Plan for {drift_summary.total_drift} operations[/bold]\n\n"
-    
+
     if drift_summary.orphaned_operations:
         plan_text += f"[yellow]Step 1: Clean {len(drift_summary.orphaned_operations)} orphaned operations[/yellow]\n"
         for op in drift_summary.orphaned_operations:
@@ -184,17 +191,17 @@ def _display_reconciliation_plan(drift_summary: ConfigDriftSummary, remove_files
                     file_action = " + DELETE file"
             plan_text += f"  • {op.dst_path} (remove from database{file_action})\n"
         plan_text += "\n"
-    
+
     if drift_summary.modified_operations or drift_summary.new_operations:
         total_sync = len(drift_summary.modified_operations) + len(drift_summary.new_operations)
         plan_text += f"[blue]Step 2: Sync {total_sync} configuration operations[/blue]\n"
-        
+
         for op in drift_summary.modified_operations:
             plan_text += f"  • {op.dst_path} (update configuration)\n"
-        
+
         for op in drift_summary.new_operations:
             plan_text += f"  • {op.dst_path} (apply new operation)\n"
-    
+
     console.print(Panel(plan_text.strip(), title="Reconciliation Plan", border_style="blue"))
 
 
@@ -274,7 +281,7 @@ def cli(
 
 
 @cli.command()
-@click.option('--check-database', is_flag=True, help='Validate against database state')
+@click.option("--check-database", is_flag=True, help="Validate against database state")
 @click.pass_obj
 def validate(ctx: ExecutionContext, check_database: bool) -> None:
     """Validate the configuration file without executing any operations."""
@@ -290,27 +297,33 @@ def validate(ctx: ExecutionContext, check_database: bool) -> None:
         console.print(f"  Package: {config.package.name} v{config.package.version}")
         console.print(f"  Safety: dry_run_default={config.safety.dry_run_default}")
         console.print(f"  Steps: {len(config.step)} operations defined")
-        
+
         # Check against database if requested
         if check_database:
             console.print("\n[bold]Database Validation[/bold]")
             with StateDatabase() as db:
                 detector = ConfigDriftDetector(db)
                 drift = detector.detect_drift(config, ctx.variant)
-                
+
                 has_issues = False
-                
+
                 if drift.orphaned_operations:
-                    console.print(f"[yellow]⚠[/yellow] {len(drift.orphaned_operations)} orphaned operations found")
+                    console.print(
+                        f"[yellow]⚠[/yellow] {len(drift.orphaned_operations)} orphaned operations found"
+                    )
                     has_issues = True
-                
+
                 if drift.modified_operations:
-                    console.print(f"[yellow]⚠[/yellow] {len(drift.modified_operations)} modified operations found")
+                    console.print(
+                        f"[yellow]⚠[/yellow] {len(drift.modified_operations)} modified operations found"
+                    )
                     has_issues = True
-                
+
                 if drift.new_operations:
-                    console.print(f"[blue]ℹ[/blue] {len(drift.new_operations)} new operations ready to apply")
-                
+                    console.print(
+                        f"[blue]ℹ[/blue] {len(drift.new_operations)} new operations ready to apply"
+                    )
+
                 if not has_issues and not drift.new_operations:
                     console.print("[green]✓[/green] Configuration matches database state")
 
@@ -324,12 +337,14 @@ def validate(ctx: ExecutionContext, check_database: bool) -> None:
 
 
 @cli.command("drift-check")
-@click.option('--detailed', is_flag=True, help='Show detailed drift information')
-@click.option('--format', type=click.Choice(['table', 'json']), default='table', help='Output format')
+@click.option("--detailed", is_flag=True, help="Show detailed drift information")
+@click.option(
+    "--format", type=click.Choice(["table", "json"]), default="table", help="Output format"
+)
 @click.pass_obj
 def drift_check(ctx: ExecutionContext, detailed: bool, format: str) -> None:
     """Check for configuration drift between TOML and database.
-    
+
     This command compares the current configuration file with the applied
     state in the database to identify:
     - New operations that need to be applied
@@ -337,29 +352,28 @@ def drift_check(ctx: ExecutionContext, detailed: bool, format: str) -> None:
     - Orphaned operations that are no longer in the configuration
     """
     logger = logging.getLogger(__name__)
-    
+
     try:
         # Load configuration
         loader = ConfigLoader(ctx.config_path)
         config = loader.load()
-        
+
         # Detect drift
         with StateDatabase() as db:
             detector = ConfigDriftDetector(db)
             drift_summary = detector.detect_drift(config, ctx.variant)
-        
+
         # Display results
-        if format == 'json':
-            import json
+        if format == "json":
             # Use model_dump_json for proper enum serialization
             console.print(drift_summary.model_dump_json(indent=2))
         else:
             _display_drift_table(drift_summary, detailed)
-        
+
         # Exit with appropriate code
         if drift_summary.total_drift > 0:
             sys.exit(1)  # Indicate drift exists
-    
+
     except Exception as e:
         console.print(f"[red]✗[/red] Configuration drift check failed: {e}")
         logger.exception("Drift check failed")
@@ -367,24 +381,38 @@ def drift_check(ctx: ExecutionContext, detailed: bool, format: str) -> None:
 
 
 @cli.command()
-@click.option('--orphaned-only', is_flag=True, help='Only clean orphaned operations')
-@click.option('--remove-files', is_flag=True, help='Remove files for orphaned operations')  
-@click.option('--no-backup', is_flag=True, help='Skip backing up files before removal')
-@click.option('--preview', is_flag=True, help='Preview cleanup without applying')
-@click.option('--paths', multiple=True, help='Clean only specific paths (can be used multiple times)')
-@click.option('--operations', multiple=True, help='Clean only specific operation types (can be used multiple times)')
-@click.option('--before', type=click.DateTime(), help='Clean only operations before this date')
-@click.option('--interactive', is_flag=True, help='Interactive mode - confirm each operation')
+@click.option("--orphaned-only", is_flag=True, help="Only clean orphaned operations")
+@click.option("--remove-files", is_flag=True, help="Remove files for orphaned operations")
+@click.option("--no-backup", is_flag=True, help="Skip backing up files before removal")
+@click.option("--preview", is_flag=True, help="Preview cleanup without applying")
+@click.option(
+    "--paths", multiple=True, help="Clean only specific paths (can be used multiple times)"
+)
+@click.option(
+    "--operations",
+    multiple=True,
+    help="Clean only specific operation types (can be used multiple times)",
+)
+@click.option("--before", type=click.DateTime(), help="Clean only operations before this date")
+@click.option("--interactive", is_flag=True, help="Interactive mode - confirm each operation")
 @click.pass_obj
-def clean(ctx: ExecutionContext, orphaned_only: bool, remove_files: bool, no_backup: bool, 
-          preview: bool, paths: tuple, operations: tuple, before: Optional[datetime], 
-          interactive: bool) -> None:
+def clean(
+    ctx: ExecutionContext,
+    orphaned_only: bool,
+    remove_files: bool,
+    no_backup: bool,
+    preview: bool,
+    paths: tuple,
+    operations: tuple,
+    before: Optional[datetime],
+    interactive: bool,
+) -> None:
     """Clean up configuration drift in database.
-    
+
     This command removes orphaned operations from the database and optionally
     removes the associated files from the filesystem. Use --preview to see
     what would be cleaned without making changes.
-    
+
     Selective cleanup options:
     - --paths: Clean only specific paths (e.g., --paths ~/.zshrc --paths ~/.gitconfig)
     - --operations: Clean only specific operation types (e.g., --operations link --operations copy)
@@ -392,48 +420,48 @@ def clean(ctx: ExecutionContext, orphaned_only: bool, remove_files: bool, no_bac
     - --interactive: Confirm each operation individually
     """
     logger = logging.getLogger(__name__)
-    
+
     try:
         # Check if enhanced cleanup should be used
         use_enhanced = bool(paths or operations or before or interactive)
-        
+
         # Load config and detect drift
         loader = ConfigLoader(ctx.config_path)
         config = loader.load()
-        
+
         with StateDatabase() as db:
             detector = ConfigDriftDetector(db)
             drift = detector.detect_drift(config, ctx.variant)
-            
+
             # Determine what to clean
             to_clean = []
             if orphaned_only:
                 to_clean = drift.orphaned_operations
             else:
                 to_clean = drift.orphaned_operations + drift.modified_operations
-            
+
             if not to_clean:
                 console.print("[green]✓[/green] No cleanup needed")
                 return
-            
+
             # Use enhanced cleanup if filters are provided
             if use_enhanced:
                 from dotfiles_sync.cleanup_enhanced import (
-                    EnhancedOrphanedOperationCleaner, 
-                    CleanupFilters
+                    EnhancedOrphanedOperationCleaner,
+                    CleanupFilters,
                 )
-                
+
                 # Create filters
                 filters = CleanupFilters(
                     paths=list(paths) if paths else None,
                     operations=list(operations) if operations else None,
                     before=before,
                     interactive=interactive,
-                    variant=ctx.variant
+                    variant=ctx.variant,
                 )
-                
+
                 # Show what will be cleaned
-                console.print(f"[bold]Enhanced Cleanup Analysis[/bold]")
+                console.print("[bold]Enhanced Cleanup Analysis[/bold]")
                 console.print(f"  Operations to evaluate: {len(to_clean)}")
                 if filters.paths:
                     console.print(f"  Path filters: {', '.join(filters.paths)}")
@@ -445,20 +473,22 @@ def clean(ctx: ExecutionContext, orphaned_only: bool, remove_files: bool, no_bac
                 console.print(f"  Remove files: {'Yes' if remove_files else 'No'}")
                 console.print(f"  Backup files: {'No' if no_backup else 'Yes'}")
                 console.print()
-                
+
                 if preview:
                     console.print("[yellow]PREVIEW MODE - No changes will be made[/yellow]\n")
                     _display_cleanup_plan(to_clean, remove_files)
                     return
-                
+
                 # Confirm unless forced or dry-run
                 if not ctx.force and not interactive:
-                    console.print("[bold yellow]⚠ WARNING:[/bold yellow] This will modify your database and potentially remove files.")
+                    console.print(
+                        "[bold yellow]⚠ WARNING:[/bold yellow] This will modify your database and potentially remove files."
+                    )
                     console.print("Make sure you have backups before proceeding.\n")
                     if not click.confirm("Proceed with cleanup?"):
                         console.print("[yellow]Cleanup cancelled[/yellow]")
                         return
-                
+
                 # Perform enhanced cleanup
                 console.print("[bold]Performing enhanced cleanup...[/bold]\n")
                 enhanced_cleaner = EnhancedOrphanedOperationCleaner(db)
@@ -467,23 +497,29 @@ def clean(ctx: ExecutionContext, orphaned_only: bool, remove_files: bool, no_bac
                     filters=filters,
                     remove_files=remove_files,
                     backup=not no_backup,
-                    dry_run=ctx.dry_run
+                    dry_run=ctx.dry_run,
                 )
-                
+
                 # Display enhanced results
                 if result.success:
-                    console.print(f"[green]✓[/green] Successfully cleaned {result.cleaned_count} operations")
+                    console.print(
+                        f"[green]✓[/green] Successfully cleaned {result.cleaned_count} operations"
+                    )
                     if result.orphaned_operations:
-                        console.print(f"  Stored for restoration: {len(result.orphaned_operations)} operations")
+                        console.print(
+                            f"  Stored for restoration: {len(result.orphaned_operations)} operations"
+                        )
                 else:
-                    console.print(f"[yellow]⚠[/yellow] Cleaned {result.cleaned_count} operations with {result.failed_count} failures")
-                
+                    console.print(
+                        f"[yellow]⚠[/yellow] Cleaned {result.cleaned_count} operations with {result.failed_count} failures"
+                    )
+
                 if result.backed_up_files:
                     console.print(f"  Backed up: {len(result.backed_up_files)} files")
-                
+
                 if result.removed_files:
                     console.print(f"  [red]Removed: {len(result.removed_files)} files[/red]")
-                
+
                 if result.errors:
                     console.print(f"\n[red]Errors ({len(result.errors)}):[/red]")
                     for error in result.errors:
@@ -492,54 +528,57 @@ def clean(ctx: ExecutionContext, orphaned_only: bool, remove_files: bool, no_bac
             else:
                 # Use standard cleanup
                 # Show what will be cleaned
-                console.print(f"[bold]Cleanup Analysis[/bold]")
+                console.print("[bold]Cleanup Analysis[/bold]")
                 console.print(f"  Operations to clean: {len(to_clean)}")
                 console.print(f"  Remove files: {'Yes' if remove_files else 'No'}")
                 console.print(f"  Backup files: {'No' if no_backup else 'Yes'}")
                 console.print(f"  Orphaned only: {'Yes' if orphaned_only else 'No'}")
                 console.print()
-                
+
                 if preview:
                     console.print("[yellow]PREVIEW MODE - No changes will be made[/yellow]\n")
                     _display_cleanup_plan(to_clean, remove_files)
                     return
-                
+
                 # Confirm unless forced or dry-run
                 if not ctx.force:
-                    console.print("[bold yellow]⚠ WARNING:[/bold yellow] This will modify your database and potentially remove files.")
+                    console.print(
+                        "[bold yellow]⚠ WARNING:[/bold yellow] This will modify your database and potentially remove files."
+                    )
                     console.print("Make sure you have backups before proceeding.\n")
                     if not click.confirm("Proceed with cleanup?"):
                         console.print("[yellow]Cleanup cancelled[/yellow]")
                         return
-                
+
                 # Perform cleanup
                 console.print("[bold]Performing cleanup...[/bold]\n")
                 cleaner = OrphanedOperationCleaner(db)
                 result = cleaner.clean_operations(
-                    to_clean,
-                    remove_files=remove_files,
-                    backup=not no_backup,
-                    dry_run=ctx.dry_run
+                    to_clean, remove_files=remove_files, backup=not no_backup, dry_run=ctx.dry_run
                 )
-            
-            # Display results
-            if result.success:
-                console.print(f"[green]✓[/green] Successfully cleaned {result.cleaned_count} operations")
-            else:
-                console.print(f"[yellow]⚠[/yellow] Cleaned {result.cleaned_count} operations with {result.failed_count} failures")
-            
-            if result.backed_up_files:
-                console.print(f"  Backed up: {len(result.backed_up_files)} files")
-            
-            if result.removed_files:
-                console.print(f"  [red]Removed: {len(result.removed_files)} files[/red]")
-            
-            if result.errors:
-                console.print(f"\n[red]Errors ({len(result.errors)}):[/red]")
-                for error in result.errors:
-                    console.print(f"  • {error}")
-                sys.exit(1)
-    
+
+                # Display results for standard cleanup
+                if result.success:
+                    console.print(
+                        f"[green]✓[/green] Successfully cleaned {result.cleaned_count} operations"
+                    )
+                else:
+                    console.print(
+                        f"[yellow]⚠[/yellow] Cleaned {result.cleaned_count} operations with {result.failed_count} failures"
+                    )
+
+                if result.backed_up_files:
+                    console.print(f"  Backed up: {len(result.backed_up_files)} files")
+
+                if result.removed_files:
+                    console.print(f"  [red]Removed: {len(result.removed_files)} files[/red]")
+
+                if result.errors:
+                    console.print(f"\n[red]Errors ({len(result.errors)}):[/red]")
+                    for error in result.errors:
+                        console.print(f"  • {error}")
+                    sys.exit(1)
+
     except Exception as e:
         console.print(f"[red]✗[/red] Cleanup failed: {e}")
         logger.exception("Cleanup failed")
@@ -547,59 +586,65 @@ def clean(ctx: ExecutionContext, orphaned_only: bool, remove_files: bool, no_bac
 
 
 @cli.command()
-@click.option('--preview', is_flag=True, help='Preview reconciliation plan without applying')
-@click.option('--clean-first', is_flag=True, default=True, help='Clean orphaned operations before sync')
-@click.option('--remove-files', is_flag=True, help='Remove orphaned files during cleanup')
+@click.option("--preview", is_flag=True, help="Preview reconciliation plan without applying")
+@click.option(
+    "--clean-first", is_flag=True, default=True, help="Clean orphaned operations before sync"
+)
+@click.option("--remove-files", is_flag=True, help="Remove orphaned files during cleanup")
 @click.pass_obj
 def reconcile(ctx: ExecutionContext, preview: bool, clean_first: bool, remove_files: bool) -> None:
     """Reconcile configuration drift by cleaning and syncing.
-    
+
     This command performs a complete reconciliation of configuration drift:
     1. Clean orphaned operations (optionally removing files)
     2. Apply new and modified operations through sync
-    
+
     Use --preview to see the reconciliation plan without making changes.
     """
     logger = logging.getLogger(__name__)
-    
+
     try:
         console.print("[bold]Configuration Reconciliation[/bold]")
-        
+
         # Load config
         loader = ConfigLoader(ctx.config_path)
         config = loader.load()
-        
+
         # Detect drift
         with StateDatabase() as db:
             detector = ConfigDriftDetector(db)
             drift = detector.detect_drift(config, ctx.variant)
-            
+
             if drift.total_drift == 0:
-                console.print("[green]✓[/green] No reconciliation needed - configuration is in sync")
+                console.print(
+                    "[green]✓[/green] No reconciliation needed - configuration is in sync"
+                )
                 return
-            
+
             # Show reconciliation plan
-            console.print(f"\n[bold]Reconciliation Analysis[/bold]")
+            console.print("\n[bold]Reconciliation Analysis[/bold]")
             console.print(f"  Orphaned to clean: {len(drift.orphaned_operations)}")
             console.print(f"  Modified to update: {len(drift.modified_operations)}")
             console.print(f"  New to apply: {len(drift.new_operations)}")
             console.print(f"  Remove files: {'Yes' if remove_files else 'No'}")
             console.print(f"  Clean first: {'Yes' if clean_first else 'No'}")
             console.print()
-            
+
             if preview:
                 console.print("[yellow]PREVIEW MODE - No changes will be made[/yellow]\n")
                 _display_reconciliation_plan(drift, remove_files)
                 return
-            
+
             # Confirm unless forced
             if not ctx.force:
-                console.print("[bold yellow]⚠ WARNING:[/bold yellow] This will modify your system and database.")
+                console.print(
+                    "[bold yellow]⚠ WARNING:[/bold yellow] This will modify your system and database."
+                )
                 console.print("Orphaned files may be removed if --remove-files is used.\n")
                 if not click.confirm("Proceed with reconciliation?"):
                     console.print("[yellow]Reconciliation cancelled[/yellow]")
                     return
-            
+
             # Step 1: Clean orphaned operations
             cleaned_count = 0
             if clean_first and drift.orphaned_operations:
@@ -609,41 +654,49 @@ def reconcile(ctx: ExecutionContext, preview: bool, clean_first: bool, remove_fi
                     drift.orphaned_operations,
                     remove_files=remove_files,
                     backup=True,
-                    dry_run=ctx.dry_run
+                    dry_run=ctx.dry_run,
                 )
                 cleaned_count = cleanup_result.cleaned_count
-                
+
                 if cleanup_result.success:
                     console.print(f"[green]✓[/green] Cleaned {cleaned_count} orphaned operations")
                 else:
-                    console.print(f"[yellow]⚠[/yellow] Cleaned {cleaned_count} operations with {cleanup_result.failed_count} failures")
+                    console.print(
+                        f"[yellow]⚠[/yellow] Cleaned {cleaned_count} operations with {cleanup_result.failed_count} failures"
+                    )
                     if cleanup_result.errors:
                         for error in cleanup_result.errors:
                             console.print(f"  Error: {error}")
-            
+
             # Step 2: Sync new and modified operations
             operations_to_sync = drift.new_operations + drift.modified_operations
             if operations_to_sync:
-                console.print(f"\n[bold]Step 2: Syncing {len(operations_to_sync)} operations[/bold]")
-                
+                console.print(
+                    f"\n[bold]Step 2: Syncing {len(operations_to_sync)} operations[/bold]"
+                )
+
                 # Use the existing sync functionality
                 executor = OperationExecutor()
                 results = executor.execute_all(config, ctx)
-                
+
                 # Display sync results
                 success_count = sum(1 for r in results if r.success)
                 failure_count = len(results) - success_count
-                
+
                 if failure_count == 0:
-                    console.print(f"[green]✓[/green] Successfully applied {success_count} operations")
+                    console.print(
+                        f"[green]✓[/green] Successfully applied {success_count} operations"
+                    )
                 else:
-                    console.print(f"[yellow]⚠[/yellow] Applied {success_count} operations, {failure_count} failed")
-            
+                    console.print(
+                        f"[yellow]⚠[/yellow] Applied {success_count} operations, {failure_count} failed"
+                    )
+
             # Final summary
-            console.print(f"\n[green]✓[/green] Reconciliation complete")
+            console.print("\n[green]✓[/green] Reconciliation complete")
             console.print(f"  Cleaned: {cleaned_count} orphaned operations")
             console.print(f"  Synced: {len(operations_to_sync)} configuration operations")
-    
+
     except Exception as e:
         console.print(f"[red]✗[/red] Reconciliation failed: {e}")
         logger.exception("Reconciliation failed")
@@ -651,7 +704,7 @@ def reconcile(ctx: ExecutionContext, preview: bool, clean_first: bool, remove_fi
 
 
 @cli.command()
-@click.option('--config-drift', is_flag=True, help='Show configuration drift summary')
+@click.option("--config-drift", is_flag=True, help="Show configuration drift summary")
 @click.pass_obj
 def status(ctx: ExecutionContext, config_drift: bool) -> None:
     """Show current system status and applied configurations."""
@@ -680,20 +733,20 @@ def status(ctx: ExecutionContext, config_drift: bool) -> None:
                     console.print(f"  • {item['dst_path']} ({item['operation_type']})")
                 if len(current_state) > 10:
                     console.print(f"  ... and {len(current_state) - 10} more")
-            
+
             # Show configuration drift if requested
             if config_drift:
                 try:
                     # Load config and detect drift
                     loader = ConfigLoader(ctx.config_path)
                     config = loader.load()
-                    
+
                     detector = ConfigDriftDetector(db)
                     drift = detector.detect_drift(config, ctx.variant)
-                    
+
                     console.print("\n[bold]Configuration Drift[/bold]")
                     _display_drift_summary(drift)
-                    
+
                 except Exception as e:
                     console.print(f"\n[yellow]⚠[/yellow] Could not check drift: {e}")
 
@@ -864,7 +917,7 @@ def rollback(ctx: ExecutionContext, rollback_to: Optional[str], file: Optional[s
 
 
 @cli.command()
-@click.option('--show-drift', is_flag=True, help='Show configuration drift before syncing')
+@click.option("--show-drift", is_flag=True, help="Show configuration drift before syncing")
 @click.pass_obj
 def sync(ctx: ExecutionContext, show_drift: bool) -> None:
     """Synchronize dotfiles according to configuration."""
@@ -881,7 +934,7 @@ def sync(ctx: ExecutionContext, show_drift: bool) -> None:
         console.print(f"  Variant: {ctx.variant}")
         console.print(f"  Mode: {'DRY RUN' if ctx.dry_run else 'APPLY'}")
         console.print()
-        
+
         # Show drift if requested
         if show_drift:
             console.print("[bold]Pre-sync Drift Analysis[/bold]")
@@ -889,7 +942,7 @@ def sync(ctx: ExecutionContext, show_drift: bool) -> None:
                 detector = ConfigDriftDetector(db)
                 drift = detector.detect_drift(config, ctx.variant)
                 _display_drift_summary(drift)
-                
+
                 if drift.total_drift > 0 and not ctx.force:
                     console.print()
                     if not click.confirm("Continue with sync?"):
@@ -1075,16 +1128,23 @@ def backup_restore(ctx: click.Context, backup_id: str) -> None:
         sys.exit(1)
 
 
-@cli.command('restore-orphaned')
-@click.option('--transaction-id', help='Restore all operations from a specific cleanup transaction')
-@click.option('--operation-ids', multiple=True, type=int, help='Specific orphaned operation IDs to restore')
-@click.option('--preview', is_flag=True, help='Preview restoration without applying')
-@click.option('--list', 'list_orphaned', is_flag=True, help='List restorable orphaned operations')
+@cli.command("restore-orphaned")
+@click.option("--transaction-id", help="Restore all operations from a specific cleanup transaction")
+@click.option(
+    "--operation-ids", multiple=True, type=int, help="Specific orphaned operation IDs to restore"
+)
+@click.option("--preview", is_flag=True, help="Preview restoration without applying")
+@click.option("--list", "list_orphaned", is_flag=True, help="List restorable orphaned operations")
 @click.pass_obj
-def restore_orphaned(ctx: ExecutionContext, transaction_id: Optional[str], 
-                      operation_ids: tuple, preview: bool, list_orphaned: bool) -> None:
+def restore_orphaned(
+    ctx: ExecutionContext,
+    transaction_id: Optional[str],
+    operation_ids: tuple,
+    preview: bool,
+    list_orphaned: bool,
+) -> None:
     """Restore previously cleaned/orphaned operations.
-    
+
     This command restores operations that were previously cleaned using the
     enhanced cleanup feature. Operations can be restored by:
     - Transaction ID: Restore all operations from a specific cleanup transaction
@@ -1092,17 +1152,17 @@ def restore_orphaned(ctx: ExecutionContext, transaction_id: Optional[str],
     - Interactive: List available operations and select which to restore
     """
     logger = logging.getLogger(__name__)
-    
+
     try:
         from dotfiles_sync.cleanup_enhanced import EnhancedOrphanedOperationCleaner
-        
+
         with StateDatabase() as db:
             cleaner = EnhancedOrphanedOperationCleaner(db)
-            
+
             # List mode - show restorable operations
             if list_orphaned:
                 console.print("[bold]Restorable Orphaned Operations[/bold]\n")
-                
+
                 # Query orphaned operations
                 cursor = db.conn.cursor()
                 cursor.execute("""
@@ -1113,12 +1173,12 @@ def restore_orphaned(ctx: ExecutionContext, transaction_id: Optional[str],
                     ORDER BY orphaned_at DESC
                     LIMIT 50
                 """)
-                
+
                 operations = cursor.fetchall()
                 if not operations:
                     console.print("[yellow]No restorable operations found[/yellow]")
                     return
-                
+
                 console.print(f"Found {len(operations)} restorable operation(s):\n")
                 for op in operations:
                     op_id, dst_path, op_type, orphaned_at, tx_id, reason = op
@@ -1128,46 +1188,52 @@ def restore_orphaned(ctx: ExecutionContext, transaction_id: Optional[str],
                     console.print(f"    Transaction: {tx_id[:8]}...")
                     console.print(f"    Reason: {reason}")
                     console.print()
-                
+
                 console.print("\n[dim]Use --operation-ids to restore specific operations[/dim]")
                 console.print("[dim]Use --transaction-id to restore all from a transaction[/dim]")
                 return
-            
+
             # Validate input
             if not transaction_id and not operation_ids:
                 console.print("[yellow]![/yellow] Specify --transaction-id or --operation-ids")
                 console.print("Use --list to see restorable operations")
                 return
-            
+
             # Preview or execute restoration
             if preview:
                 console.print("[yellow]PREVIEW MODE - No changes will be made[/yellow]\n")
-            
+
             result = cleaner.restore_orphaned_operations(
                 transaction_id=transaction_id,
                 operation_ids=list(operation_ids) if operation_ids else None,
-                dry_run=preview or ctx.dry_run
+                dry_run=preview or ctx.dry_run,
             )
-            
+
             # Display results
             if result.success:
-                console.print(f"[green]✓[/green] Successfully restored {result.restored_count} operations")
+                console.print(
+                    f"[green]✓[/green] Successfully restored {result.restored_count} operations"
+                )
                 if result.restored_files:
                     console.print("\nRestored files:")
                     for file in result.restored_files:
                         console.print(f"  • {file}")
             else:
-                console.print(f"[yellow]⚠[/yellow] Restored {result.restored_count} operations with {result.failed_count} failures")
-                
+                console.print(
+                    f"[yellow]⚠[/yellow] Restored {result.restored_count} operations with {result.failed_count} failures"
+                )
+
             if result.errors:
                 console.print(f"\n[red]Errors ({len(result.errors)}):[/red]")
                 for error in result.errors:
                     console.print(f"  • {error}")
                 sys.exit(1)
-            
+
             if preview and result.restored_count > 0:
-                console.print("\n[yellow]ℹ[/yellow] This was a preview. To apply restoration, run without --preview")
-    
+                console.print(
+                    "\n[yellow]ℹ[/yellow] This was a preview. To apply restoration, run without --preview"
+                )
+
     except Exception as e:
         console.print(f"[red]✗[/red] Restoration failed: {e}")
         logger.exception("Restoration failed")

@@ -7,7 +7,7 @@ version pinning, sudo handling, and idempotent operations for Debian/Ubuntu syst
 
 import subprocess
 import shutil
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 from dotfiles_sync.models import StepConfig, OperationResult
@@ -53,8 +53,10 @@ class AptVerb(Verb):
             errors.append("Packages must be a non-empty list")
 
         # Validate platform - APT works on Debian-based systems
-        if context.execution_context.system_info.platform != 'linux':
-            errors.append(f"APT not supported on platform: {context.execution_context.system_info.platform}")
+        if context.execution_context.system_info.platform != "linux":
+            errors.append(
+                f"APT not supported on platform: {context.execution_context.system_info.platform}"
+            )
 
         # Check if APT is available
         if not self._find_apt():
@@ -102,7 +104,7 @@ class AptVerb(Verb):
                 try:
                     # Parse package specification (package=version)
                     package_info = self._parse_package_spec(package)
-                    
+
                     # Check if already installed
                     if self._is_package_installed(package_info):
                         already_installed.append(package)
@@ -152,7 +154,9 @@ class AptVerb(Verb):
                 message=f"Operation failed: {str(e)}",
             )
 
-    def rollback(self, step: StepConfig, context: OperationContext, rollback_data: Dict[str, Any]) -> bool:
+    def rollback(
+        self, step: StepConfig, context: OperationContext, rollback_data: Dict[str, Any]
+    ) -> bool:
         """
         Rollback apt_install operation by uninstalling packages that were installed.
 
@@ -202,7 +206,7 @@ class AptVerb(Verb):
         Perform a dry run of apt_install operation.
 
         Args:
-            step: Step configuration  
+            step: Step configuration
             context: Operation context
 
         Returns:
@@ -231,7 +235,7 @@ class AptVerb(Verb):
         # Check which packages would be installed
         would_install = []
         already_installed = []
-        
+
         if self._find_apt():
             for package in packages:
                 try:
@@ -283,17 +287,14 @@ class AptVerb(Verb):
             # Check if sudo exists
             if not shutil.which("sudo"):
                 return False
-                
+
             # Check if we can use sudo (won't prompt for password in non-interactive mode)
             result = subprocess.run(
-                ["sudo", "-n", "true"],
-                capture_output=True,
-                text=True,
-                timeout=5
+                ["sudo", "-n", "true"], capture_output=True, text=True, timeout=5
             )
-            
+
             return result.returncode == 0
-            
+
         except Exception:
             return False
 
@@ -307,6 +308,7 @@ class AptVerb(Verb):
             cache_file = Path("/var/cache/apt/pkgcache.bin")
             if cache_file.exists():
                 import time
+
                 age_hours = (time.time() - cache_file.stat().st_mtime) / 3600
                 if age_hours < 1:
                     return True  # Cache is fresh
@@ -315,17 +317,17 @@ class AptVerb(Verb):
             cmd = []
             if use_sudo:
                 cmd.append("sudo")
-            
+
             cmd.extend([self.apt_path, "update"])
-            
+
             self.logger.info("Updating APT package cache...")
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minutes
+                timeout=300,  # 5 minutes
             )
-            
+
             if result.returncode == 0:
                 self.logger.info("APT cache updated successfully")
                 return True
@@ -340,16 +342,12 @@ class AptVerb(Verb):
     def _parse_package_spec(self, package_spec: str) -> Dict[str, Any]:
         """
         Parse package specification string.
-        
+
         Supports formats:
         - package_name
         - package_name=version
         """
-        package_info = {
-            "name": package_spec,
-            "version": None,
-            "original_spec": package_spec
-        }
+        package_info = {"name": package_spec, "version": None, "original_spec": package_spec}
 
         # Check for version specification
         if "=" in package_spec:
@@ -364,16 +362,13 @@ class AptVerb(Verb):
         try:
             # Use dpkg to check if package is installed
             result = subprocess.run(
-                ["dpkg", "-l", package_info["name"]],
-                capture_output=True,
-                text=True,
-                timeout=10
+                ["dpkg", "-l", package_info["name"]], capture_output=True, text=True, timeout=10
             )
-            
+
             # dpkg -l returns 0 if package is installed
             if result.returncode == 0:
                 # Check if the package is actually installed (not just known)
-                lines = result.stdout.strip().split('\n')
+                lines = result.stdout.strip().split("\n")
                 for line in lines:
                     if line.startswith("ii"):  # "ii" means installed
                         if package_info["name"] in line:
@@ -381,7 +376,7 @@ class AptVerb(Verb):
                             if package_info["version"]:
                                 return package_info["version"] in line
                             return True
-            
+
             return False
 
         except Exception as e:
@@ -397,21 +392,27 @@ class AptVerb(Verb):
             cmd = []
             if use_sudo:
                 cmd.append("sudo")
-                
-            cmd.extend([
-                self.apt_path, "install", "-y",  # -y for non-interactive
-                package_info["original_spec"]
-            ])
-            
-            self.logger.info(f"Installing {package_info['original_spec']} with command: {' '.join(cmd)}")
-            
+
+            cmd.extend(
+                [
+                    self.apt_path,
+                    "install",
+                    "-y",  # -y for non-interactive
+                    package_info["original_spec"],
+                ]
+            )
+
+            self.logger.info(
+                f"Installing {package_info['original_spec']} with command: {' '.join(cmd)}"
+            )
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=600  # 10 minutes per package
+                timeout=600,  # 10 minutes per package
             )
-            
+
             if result.returncode == 0:
                 self.logger.info(f"Successfully installed {package_info['name']}")
                 return True
@@ -435,19 +436,16 @@ class AptVerb(Verb):
             cmd = []
             if use_sudo:
                 cmd.append("sudo")
-                
-            cmd.extend([
-                self.apt_path, "remove", "-y",
-                package_info["name"]
-            ])
-            
+
+            cmd.extend([self.apt_path, "remove", "-y", package_info["name"]])
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minutes
+                timeout=300,  # 5 minutes
             )
-            
+
             return result.returncode == 0
 
         except Exception as e:
